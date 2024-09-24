@@ -80,7 +80,6 @@ controls1 = dbc.Card(
             style={'width': '100%', 'padding': '5px 5px', 'display': 'inline-block'},
         ),
         ])
-
     ],
     body=True,
     color="#F9F9F9",
@@ -360,7 +359,6 @@ def update_output(icontents, ifilename, date):
     
             dff = pd.concat([dff, df1], axis=1)
             dffPeaks = pd.concat([dffPeaks, dfPeaks1], axis=1)
-            
         
         dffPeaks['ShowOnGraph'] = False    
         dff.drop("index", axis=1, inplace=True)
@@ -372,7 +370,8 @@ def update_output(icontents, ifilename, date):
 
     checklist_options = [{"label": item.title(), "value": item} for item in dff.columns.to_list()]
 
-    return [checklist_options,dff.to_json(date_format='iso', orient='split'),
+    return [checklist_options,
+            dff.to_json(date_format='iso', orient='split'),
             dffPeaks.to_json(date_format='iso', orient='split')]
 #------------------------------------------------------------------------------
 
