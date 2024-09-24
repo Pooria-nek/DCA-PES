@@ -31,6 +31,23 @@ def UPDATE_card(upload_output_id='output-data-upload'):
                     ),
                 ]),
             ], style={'width': '100%', 'padding': '5px 5px', 'display': 'inline-block'}),
+            
+            # Checklist
+            dbc.Row(children=[
+                dbc.Row(children=[
+                    html.H4("Select data columns", style={"margin-left": "25px","margin-right": "5px"})],
+                    ),
+        
+                dbc.Row(children=[
+                    dcc.Checklist(
+                        id="checklistfiles",
+                        labelStyle={'display': 'block'},
+                        inputStyle={"margin-left": "20px","margin-right": "5px"}
+                    )
+                ])],
+
+                style={'width': '100%', 'padding': '5px 5px', 'display': 'inline-block'},
+            ),
         ],
         body=True,
         color="#F9F9F9",
@@ -46,14 +63,21 @@ def PREVIEW_card(file_content_id='output-data-preview', x_var_id='x-variable', y
             dbc.Label("X variable"),
             dcc.Dropdown(
                 id=x_var_id,
-                options=[],  # Populated dynamically in callback
+                options=[{"label": col, "value": col} for col in pd.DataFrame()],
                 multi=False  # Single-select for X variable
             ),
             
             dbc.Label("Y variable"),
             dcc.Dropdown(
                 id=y_var_id,
-                options=[],  # Populated dynamically in callback
+                options=[{"label": col, "value": col} for col in pd.DataFrame()],
+                multi=True  # Multi-select for Y variables
+            ),
+
+            dbc.Label("select Slice"),
+            dcc.Dropdown(
+                id='slice_variable',
+                options=[{"label": col, "value": col} for col in pd.DataFrame()],
                 multi=True  # Multi-select for Y variables
             ),
             
