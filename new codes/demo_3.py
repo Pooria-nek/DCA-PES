@@ -31,12 +31,22 @@ app.layout = html.Div(children=[
     ]),
 ])
 
+def split_rapid_changes(df, column, threshold=30):
+    """
+    Split the DataFrame based on rapid changes in the specified column.
+    """
+    df['diff'] = df[column].diff().fillna(0)
+    rapid_change_points = df.index[np.abs(df['diff']) > threshold]
+    splits = np.split(df, rapid_change_points)
+    return splits
+
 @app.callback(
     [Output('output-data-preview', 'children'),
      Output('x-variable', 'options'),
      Output('y-variable', 'options'),
      Output('cluster-graph', 'figure'),
-     Output('inputqa', 'value')],
+    #  Output('inputqa', 'value')
+     ],
     [Input('upload-data', 'contents'),
      Input('x-variable', 'value'),
      Input('y-variable', 'value'),
@@ -66,8 +76,7 @@ def update_output(contents, x_var, y_var, graph_type, filename):
         if x_var and y_var:
             figure = {
                 'data': [
-                    {'x': df[x_var], 'y': df[y], 'type': graph_type, 'name': y}
-                    for y in y_var
+                    {'x': df[x_var], 'y': df[y], 'type': graph_type, 'name': y} for y in y_var
                 ],
                 'layout': {
                     'title': 'Data Preview',
@@ -75,13 +84,16 @@ def update_output(contents, x_var, y_var, graph_type, filename):
                     'yaxis': {'title': ', '.join(y_var)}
                 }
             }
-
             #find peak and clean input
 
         if 'Production' in df.columns and not df['Production'].empty:
             qa_value = df['Production'].iloc[0]
         else:
             qa_value = 10000
+
+        print(figure)
+        print("\n\n")
+        print(options)
 
         return (html.Div([
                     html.H5(filename),
@@ -90,10 +102,12 @@ def update_output(contents, x_var, y_var, graph_type, filename):
                 ]), 
                 options, 
                 options,
-                figure,
-                qa_value)
+                figure
+                # ,
+                # qa_value
+                )
 
-    return (html.Div(["Drag and drop or ", html.A("select a CSV file")]), [], [], {}, 10000)
+    return (html.Div(["Drag and drop or ", html.A("select a CSV file")]), [], [], {})
 
 @app.callback(
     Output('uncertainty-graph', 'figure'),
