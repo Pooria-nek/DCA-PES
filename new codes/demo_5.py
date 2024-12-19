@@ -7,20 +7,17 @@ import pandas as pd
 import base64
 import numpy as np
 from scipy.signal import find_peaks
-
 import io
-from DCA04 import  *
-
+from DCA04 import *
 from used_cards import UPDATE_card, PREVIEW_card
 
 # Initialize the Dash app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
+# Define the layout of the app
 app.layout = html.Div(children=[
     html.H1(children='Analysis => demo_5'),
-
     dcc.Store(id='dataframevalue'),
-
     dbc.Row([
         dbc.Col(UPDATE_card(), width=6),
         dbc.Col(PREVIEW_card(), width=6),
@@ -48,7 +45,7 @@ app.layout = html.Div(children=[
 )
 def update_output(icontents, ifilename, x_var, y_var, s_var, graph_type):
     if icontents is None:
-        raise PreventUpdate  # Prevent the callback from updating if no file is uploaded
+        raise dash.exceptions.PreventUpdate  # Prevent the callback from updating if no file is uploaded
 
     try:
         # Parse the uploaded data
@@ -68,7 +65,6 @@ def update_output(icontents, ifilename, x_var, y_var, s_var, graph_type):
         
         # Sort the sliced data
         sdf = sdf.sort_values(by=sdf.columns[0])
-        print(sdf)
 
         # Default figure structure if no variables are selected
         figure = {'data': [], 'layout': {'title': 'Data Preview'}}
