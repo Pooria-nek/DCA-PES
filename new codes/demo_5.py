@@ -62,9 +62,11 @@ def update_output(icontents, ifilename, x_var, y_var, s_var, graph_type):
 
         # Select the slice of data if s_var is provided
         sdf = dff.iloc[s_var] if s_var else dff
+
+        print(sdf)
         
         # Sort the sliced data
-        sdf = sdf.sort_values(by=sdf.columns[0])
+        sdf = sdf.sort_index()
 
         # Default figure structure if no variables are selected
         figure = {'data': [], 'layout': {'title': 'Data Preview'}}
