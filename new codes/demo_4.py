@@ -62,15 +62,17 @@ def update_output(icontents, ifilename, x_var, y_var, graph_type):
     dff = pd.DataFrame(columns=["Date"])
     dffPeaks = pd.DataFrame(columns=["Date"])
     dff = dff.set_index("Date")
-    dffPeaks = dffPeaks.set_index("Date")   
+    dffPeaks = dffPeaks.set_index("Date")
+    # tdf = tdf.set_index("test")
     if icontents:
         contents = icontents
         filename = ifilename
 
-        df1,dfPeaks1,dateCol = parse_data(contents, filename,[''])
+        df1,dfPeaks1,dateCol,non_nan_indices = parse_data(contents, filename,[''])
         df1 = df1.set_index(dateCol)
         dfPeaks1 = dfPeaks1.set_index(dateCol)
 
+        # tdf = pd.concat([splits, tdf], axis=1)
         dff = pd.concat([dff, df1], axis=1)
         dffPeaks = pd.concat([dffPeaks, dfPeaks1], axis=1)
         
@@ -81,31 +83,52 @@ def update_output(icontents, ifilename, x_var, y_var, graph_type):
         dffPeaks=dffPeaks.reset_index()
         dffPeaksUseForDCA=pd.concat([dffPeaks[dateCol], dffPeaks['ShowOnGraph']], axis=1)
     
-        ### for multiple file selection 
-        # if icontents:
-        #     for i, contents in enumerate(icontents):
-        #         contents = icontents[i]
-        #         filename = ifilename[i]
+    ### for multiple file selection 
+    # if icontents:
+    #     for i, contents in enumerate(icontents):
+    #         contents = icontents[i]
+    #         filename = ifilename[i]
 
-        #         df1,dfPeaks1,dateCol = parse_data(contents, filename,[''])
-        #         df1 = df1.set_index(dateCol)
-        #         dfPeaks1 = dfPeaks1.set_index(dateCol)
+    #         df1,dfPeaks1,dateCol = parse_data(contents, filename,[''])
+    #         df1 = df1.set_index(dateCol)
+    #         dfPeaks1 = dfPeaks1.set_index(dateCol)
 
-        #         dff = pd.concat([dff, df1], axis=1)
-        #         dffPeaks = pd.concat([dffPeaks, dfPeaks1], axis=1)
-            
-        #     dffPeaks['ShowOnGraph'] = False    
-        #     dff.drop("index", axis=1, inplace=True)
-        #     dffPeaks.drop("index", axis=1, inplace=True)   
-        #     dff=dff.reset_index()
-        #     dffPeaks=dffPeaks.reset_index()
-        #     dffPeaksUseForDCA=pd.concat([dffPeaks[dateCol], dffPeaks['ShowOnGraph']], axis=1)
+    #         dff = pd.concat([dff, df1], axis=1)
+    #         dffPeaks = pd.concat([dffPeaks, dfPeaks1], axis=1)
+        
+    #     dffPeaks['ShowOnGraph'] = False    
+    #     dff.drop("index", axis=1, inplace=True)
+    #     dffPeaks.drop("index", axis=1, inplace=True)   
+    #     dff=dff.reset_index()
+    #     dffPeaks=dffPeaks.reset_index()
+    #     dffPeaksUseForDCA=pd.concat([dffPeaks[dateCol], dffPeaks['ShowOnGraph']], axis=1)
 
-    print(dff.columns.to_list())
-    print(dff.count)
+    # print(dff.columns.to_list())
+    # print(dff.count)
+
+    print("peakes -> ")
+    print(non_nan_indices)
+
+    # Split the DataFrame into segments based on the peaks
+    # Split df based on these non-NaN indices
+    splits = []
+    prev_idx = 0
+    for idx in non_nan_indices:
+        split_segment = df1.iloc[prev_idx:idx]  # Get the segment between peaks
+        splits.append(split_segment)
+        prev_idx = idx  # Update the start index for the next split
+
+    print("split")
+    print(splits)
+    for i, split in enumerate(splits):
+        print(f"\nSplit {i}:\n", split)
+
+    slice_selector = [{"label": "i", "value": "split"} for i,split in enumerate(splits)]
+    # slice_selector = [{"label": part, "value": part} for part in splits]
+    # print(slice_selector)
 
     checklist_options = [{"label": item.title(), "value": item} for item in dff.columns.to_list()]
-    print(checklist_options)
+    # print(checklist_options)
 
     options = [{'label': col, 'value': col} for col in dff.columns]
 
@@ -134,7 +157,7 @@ def update_output(icontents, ifilename, x_var, y_var, graph_type):
             dff.to_json(date_format='iso', orient='split'),
             options, 
             options,
-            options,
+            slice_selector,
             figure
             ]
 
@@ -234,11 +257,11 @@ def parse_data(contents, filename, ChecklistOptionsMonth):
     print("\n dfcolindx -> ")
     print(dateColIdx)
     print("\n Splits -> ")
-    for i, split in enumerate(splits):
-        print(f"\nSplit {i}:\n", split)
+    # for i, split in enumerate(splits):
+    #     print(f"\nSplit {i}:\n", split)
 
 
-    return df, dfPeaks, dateColIdx
+    return df, dfPeaks, dateColIdx, non_nan_indices
 
 # @app.callback(
 #     [
