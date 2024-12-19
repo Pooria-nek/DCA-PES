@@ -183,6 +183,7 @@ def findPeaks(df, fieldName, factor):
     M=df[fieldName]
     M=pd.concat([pd.Series([0]), M])    
     M=M.to_numpy()    
+    ### IMPORTANT ### order should be define by user
     indices = argrelextrema(M, np.greater, order=6)  # np.greater for maxima
     indices=np.asarray(indices)-1
     indices=indices.flatten()
