@@ -9,7 +9,8 @@ import numpy as np
 from scipy.signal import find_peaks
 import io
 from DCA04 import *
-from used_cards import UPDATE_card, PREVIEW_card
+from used_cards import UPDATE_card, PREVIEW_card, DETERMINISTIC_card, PROBABILISTIC_card
+from scipy.optimize import curve_fit
 
 # Initialize the Dash app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -21,6 +22,10 @@ app.layout = html.Div(children=[
     dbc.Row([
         dbc.Col(UPDATE_card(), width=6),
         dbc.Col(PREVIEW_card(), width=6),
+    ]),
+    dbc.Row([
+        dbc.Col(DETERMINISTIC_card(), width=6),
+        # dbc.Col(PROBABILISTIC_card(), width=6),
     ]),
     dbc.Spinner(html.Div(id="loading-output")),
     html.Div(id='error-message', style={'color': 'red'}),
@@ -55,8 +60,8 @@ def update_output(icontents, ifilename, x_var, y_var, s_var, graph_type):
     try:
         # Parse the uploaded data
         dff, dffPeaks, dateCol, non_nan_indices = parse_data(icontents, ifilename, [''])
-        print("dff")
-        print(dff)
+        # print("dff")
+        # print(dff)
 
         # Checklist options for data columns
         checklist_options = [{"label": col, "value": col} for col in dff.columns]
@@ -64,17 +69,17 @@ def update_output(icontents, ifilename, x_var, y_var, s_var, graph_type):
         # Options for dropdowns
         dropdown_options = [{'label': col, 'value': col} for col in dff.columns]
 
-        print("dffPeaks")
-        print(dffPeaks)
+        # print("dffPeaks")
+        # print(dffPeaks)
         
         # Slice selector based on detected peaks, starting with a 0 value
         slice_selector = [{'label': 'Slice 0', 'value': 0}] + [{'label': f'Slice {i+1}', 'value': dffPeaks.index[i]} for i in range(len(dffPeaks))]
 
-        print("slice_selector")
-        print(slice_selector)
+        # print("slice_selector")
+        # print(slice_selector)
 
-        print("s_var")
-        print(s_var)
+        # print("s_var")
+        # print(s_var)
 
         # If more than 2 values in s_var, print dff value from first to second s_var value
         if s_var and len(s_var) > 1:
@@ -83,9 +88,6 @@ def update_output(icontents, ifilename, x_var, y_var, s_var, graph_type):
         else:
             sdf = dff
             
-        # # Select the slice of data if s_var is provided
-        # sdf = dff.iloc[s_var] if s_var else dff
-
         # Sort the sliced data
         sdf = sdf.sort_index()
 
@@ -136,6 +138,111 @@ def download_data(n_clicks, data):
         raise dash.exceptions.PreventUpdate
     dff = pd.read_json(data, orient='split')
     return dcc.send_data_frame(dff.to_csv, "processed_data.csv")
+
+@app.callback(
+    Output('dca-graph', 'figure'),
+    [
+        Input('ChecklistOptionsSum', 'value'),
+        Input('ChecklistOptionsPeaks', 'value'),
+        Input('ChecklistOptionsDeclineCurve', 'value'),
+        Input('slider_numberofmonths', 'value'),
+        State('dataframevalue', 'data')
+    ]
+)
+def update_deterministic_graph(show_total, show_peaks, decline_curve, num_months, data):
+    # if data is None:
+    #     raise dash.exceptions.PreventUpdate
+
+    dff = pd.read_json(data, orient='split')
+    print("Data for deterministic graph:")
+    print(dff)
+    figure = {'data': [], 'layout': {'title': 'Deterministic Analysis'}}
+
+    # Add traces based on the checklist options
+    if 'showTotal' in show_total:
+        numeric_dff = dff.select_dtypes(include=[np.number])  # Select only numeric columns
+        figure['data'].append({
+            'x': numeric_dff.index,
+            'y': numeric_dff.sum(axis=1),
+            'type': 'line',
+            'name': 'Total'
+        })
+
+    if 'showPeaks' in show_peaks:
+        peaks, _ = find_peaks(dff.iloc[:, 0])  # Assuming the first column for simplicity
+        figure['data'].append({
+            'x': dff.index[peaks],
+            'y': dff.iloc[peaks, 0],
+            'mode': 'markers',
+            'marker': {'color': 'red', 'size': 5},
+            'name': 'Peaks'
+        })
+
+    # Add decline curve traces
+    if 'showArps' in decline_curve:
+        # Example Arps decline curve logic
+        # Assuming 'time' is the index and 'production' is the column to fit the curve
+
+        def arps_decline(t, qi, di, b):
+            return qi / ((1 + b * di * t) ** (1 / b))
+
+        time = np.arange(len(dff))
+        production = dff.iloc[:, 0]  # Assuming the first column for simplicity
+
+        # Fit the Arps decline curve
+        try:
+            popt, _ = curve_fit(arps_decline, time, production, maxfev=10000)
+            qi, di, b = popt
+
+            # Generate fitted values
+            fitted_values = arps_decline(time, qi, di, b)
+
+            # Add the fitted curve to the figure
+            figure['data'].append({
+                'x': dff.index,
+                'y': fitted_values,
+                'type': 'line',
+                'name': 'Arps Decline Curve',
+                'line': {'dash': 'dash'}
+            })
+        except Exception as e:
+            print("Error fitting Arps decline curve:", e)
+
+    if 'showDuong' in decline_curve:
+        # Add Duong decline curve logic here
+        pass
+
+    print("Figure data:")
+    print(figure['data'])
+    return figure
+
+@app.callback(
+    Output('uncertainty-graph', 'figure'),
+    [
+        Input('inputqa', 'value'),
+        Input('prob-dist-button', 'value'),
+        Input('Triangular-left', 'value'),
+        Input('Triangular-right', 'value'),
+        Input('Normal-std', 'value'),
+        State('dataframevalue', 'data')
+    ]
+)
+# def update_probabilistic_graph(qa, dist_type, tri_left, tri_right, norm_std, data):
+#     if data is None:
+#         raise dash.exceptions.PreventUpdate
+
+#     dff = pd.read_json(data, orient='split')
+#     figure = {'data': [], 'layout': {'title': 'Probabilistic Analysis'}}
+
+#     # Add probabilistic analysis logic here based on the selected distribution type
+#     if dist_type == 'Triangular':
+#         # Add Triangular distribution logic here
+#         pass
+#     elif dist_type == 'Normal':
+#         # Add Normal distribution logic here
+#         pass
+
+#     return figure
 
 def parse_data(contents, filename, date_columns=[]):
     """

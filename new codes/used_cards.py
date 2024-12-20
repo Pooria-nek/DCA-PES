@@ -7,7 +7,7 @@ import pandas as pd
 def UPDATE_card(upload_output_id='output-data-upload'):
     return dbc.Card(
         [
-            html.H2("Data"),
+            html.H2("Data Upload"),
             html.Hr(),
             dbc.Row([
                 dbc.Col(children=[
@@ -35,7 +35,7 @@ def UPDATE_card(upload_output_id='output-data-upload'):
             # Checklist
             dbc.Row(children=[
                 dbc.Row(children=[
-                    html.H4("Select data columns", style={"margin-left": "25px","margin-right": "5px"})],
+                    html.H4("Select Data Columns", style={"margin-left": "25px","margin-right": "5px"})],
                     ),
         
                 dbc.Row(children=[
@@ -57,28 +57,28 @@ def UPDATE_card(upload_output_id='output-data-upload'):
 def PREVIEW_card(file_content_id='output-data-preview', x_var_id='x-variable', y_var_id='y-variable', graph_id='cluster-graph', graph_type_id='graph-type'):
     return dbc.Card(
         [
-            html.H4("Preview data"),
+            html.H4("Data Preview"),
             html.Div(id=file_content_id),  # Displays file details (filename, number of rows, etc.)
             
-            dbc.Label("X variable"),
+            dbc.Label("X Variable"),
             dcc.Dropdown(
                 id=x_var_id,
                 options=[{"label": col, "value": col} for col in pd.DataFrame()],
                 multi=False  # Single-select for X variable
             ),
             
-            dbc.Label("Y variable"),
+            dbc.Label("Y Variable"),
             dcc.Dropdown(
                 id=y_var_id,
                 options=[{"label": col, "value": col} for col in pd.DataFrame()],
                 multi=True  # Multi-select for Y variables
             ),
 
-            dbc.Label("select Slice"),
+            dbc.Label("Select Slice"),
             dcc.Dropdown(
                 id='slice_variable',
                 options=[{"label": col, "value": col} for col in pd.DataFrame()],
-                multi=True  # Multi-select for Y variables
+                multi=True  # Multi-select for slices
             ),
             
             # Graph type selection dropdown
@@ -88,7 +88,6 @@ def PREVIEW_card(file_content_id='output-data-preview', x_var_id='x-variable', y
                     id=graph_type_id,  # This ID will be used in the callback
                     options=[
                         {'label': 'Line', 'value': 'line'},
-                        # {'label': 'Scatter', 'value': 'scatter'},
                         {'label': 'Bar', 'value': 'bar'}
                     ],
                     value='line'  # Default graph type
@@ -106,13 +105,11 @@ def PREVIEW_card(file_content_id='output-data-preview', x_var_id='x-variable', y
 def DETERMINISTIC_card():
     return dbc.Card(
         [
-            html.Div(id='output-data-upload22'),
-
             html.H2("Deterministic Analysis"),
             dcc.Checklist(
                 id="ChecklistOptionsSum",
                 options=[
-                    {"label": "Show total", "value": "showTotal", "disabled": True},
+                    {"label": "Show Total", "value": "showTotal"},
                 ],
                 value=["showTotal"],
                 labelStyle={"display": "inline-block"},
@@ -121,7 +118,7 @@ def DETERMINISTIC_card():
             dcc.Checklist(
                 id="ChecklistOptionsPeaks",
                 options=[
-                    {"label": "Show peaks", "value": "showPeaks"}
+                    {"label": "Show Peaks", "value": "showPeaks"}
                 ],
                 value=[],
                 labelStyle={"display": "inline-block"},
@@ -131,8 +128,8 @@ def DETERMINISTIC_card():
             dcc.Checklist(
                 id="ChecklistOptionsDeclineCurve",
                 options=[
-                    {"label": "Arpes decline curve", "value": "showArpes"},
-                    {"label": "Duong decline curve", "value": "showDuong"}
+                    {"label": "Arps Decline Curve", "value": "showArps"},
+                    {"label": "Duong Decline Curve", "value": "showDuong"}
                 ],
                 value=[],
                 labelStyle={"display": "inline-block"},
@@ -140,7 +137,7 @@ def DETERMINISTIC_card():
             ),
 
             html.Div(id='slider-output-container'),
-            html.H5("Number of months to predict:"),
+            html.H5("Number of Months to Predict:"),
             dcc.Slider(
                 id="slider_numberofmonths",
                 min=1,
@@ -160,16 +157,6 @@ def DETERMINISTIC_card():
                 dbc.Row(dcc.Graph(id="dca-graph")),
             ], style={"height": "200", "width": "80vh"}),
             html.Div([
-                # dcc.Markdown("""
-                #     **Selection Data**
-
-                #     Choose the lasso or rectangle tool in the graph's menu
-                #     bar and then select points in the graph.
-
-                #     Note that if `layout.clickmode = 'event+select'`, selection data also
-                #     accumulates (or un-accumulates) selected data if you hold down the shift
-                #     button while clicking.
-                # """),
                 dbc.Row([
                     dbc.Col(
                         html.Pre(id='selected-data-printout', style={'whiteSpace': 'pre-line'}), md=2),
@@ -188,7 +175,7 @@ def PROBABILISTIC_card():
             html.H2("Probabilistic Analysis"),
             
             # Economic limit production rate input
-            html.H5("Economic limit production rate qa:"),
+            html.H5("Economic Limit Production Rate (qa):"),
             dbc.Input(type="number", id='inputqa', value=10000),
             
             # Output display for text (Np output)
@@ -216,13 +203,13 @@ def PROBABILISTIC_card():
                     dbc.Row([
                         dbc.Col([
                             dbc.InputGroup([
-                                dbc.InputGroupText("Triangular left:"),                        
+                                dbc.InputGroupText("Triangular Left:"),                        
                                 dbc.Input(id="Triangular-left", type="number", placeholder="%", value=20, min=0, max=100)
                             ])
                         ]),
                         dbc.Col([
                             dbc.InputGroup([
-                                dbc.InputGroupText("Triangular right:"),                        
+                                dbc.InputGroupText("Triangular Right:"),                        
                                 dbc.Input(id="Triangular-right", type="number", placeholder="%", value=20, min=0, max=100)
                             ])
                         ])
@@ -232,7 +219,7 @@ def PROBABILISTIC_card():
                     dbc.Row([
                         dbc.Col([
                             dbc.InputGroup([
-                                dbc.InputGroupText("Normal STD % mean:"),                        
+                                dbc.InputGroupText("Normal STD % Mean:"),                        
                                 dbc.Input(id="Normal-std", type="number", placeholder="%", value=30, min=0, max=100)
                             ])
                         ])

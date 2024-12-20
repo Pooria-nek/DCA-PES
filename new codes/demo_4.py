@@ -32,10 +32,10 @@ app.layout = html.Div(children=[
         dbc.Col(PREVIEW_card(), width=6),
     ]),
     
-    # dbc.Row([
-    #     dbc.Col(DETERMINISTIC_card(), width=6),
-    #     dbc.Col(PROBABILISTIC_card(), width=6),
-    # ]),
+    dbc.Row([
+        dbc.Col(DETERMINISTIC_card(), width=6),
+        dbc.Col(PROBABILISTIC_card(), width=6),
+    ]),
 ])
 
 @app.callback(
