@@ -50,23 +50,47 @@ def update_output(icontents, ifilename, x_var, y_var, s_var, graph_type):
     try:
         # Parse the uploaded data
         dff, dffPeaks, dateCol, non_nan_indices = parse_data(icontents, ifilename, [''])
+        print("dff")
+        print(dff)
 
         # Checklist options for data columns
         checklist_options = [{"label": col, "value": col} for col in dff.columns]
         
         # Options for dropdowns
         dropdown_options = [{'label': col, 'value': col} for col in dff.columns]
-        
-        # Slice selector based on detected peaks
-        slice_selector = [{'label': f'Slice {i}', 'value': i} for i in range(len(dffPeaks))]
 
-        # Select the slice of data if s_var is provided
-        sdf = dff.iloc[s_var] if s_var else dff
-
-        print(sdf)
+        print("dffPeaks")
+        print(dffPeaks)
         
+        # Slice selector based on detected peaks, starting with a 0 value
+        slice_selector = [{'label': 'Slice 0', 'value': 0}] + [{'label': f'Slice {i+1}', 'value': dffPeaks.index[i]} for i in range(len(dffPeaks))]
+
+        print("slice_selector")
+        print(slice_selector)
+
+        print("s_var")
+        print(s_var)
+
+        # If more than 2 values in s_var, print dff value from first to second s_var value
+        if s_var and len(s_var) > 1:
+            print(dff.iloc[s_var[0]:s_var[1]])
+            sdf = dff.iloc[s_var[0]:s_var[1]]
+        else:
+            sdf = dff
+            
+        # # Select the slice of data if s_var is provided
+        # sdf = dff.iloc[s_var] if s_var else dff
+
         # Sort the sliced data
         sdf = sdf.sort_index()
+
+
+        # # Print the slice of data from s_var-1 to s_var if s_var is provided
+        # if s_var:
+        #     start_idx = max(0, s_var - 1)
+        #     print(dff.iloc[start_idx:s_var + 1])
+        # else:
+        #     print(dff)
 
         # Default figure structure if no variables are selected
         figure = {'data': [], 'layout': {'title': 'Data Preview'}}
