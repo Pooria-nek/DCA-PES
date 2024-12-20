@@ -101,3 +101,145 @@ def PREVIEW_card(file_content_id='output-data-preview', x_var_id='x-variable', y
         body=True,
         color="#F9F9F9",
     )
+
+
+def DETERMINISTIC_card():
+    return dbc.Card(
+        [
+            html.Div(id='output-data-upload22'),
+
+            html.H2("Deterministic Analysis"),
+            dcc.Checklist(
+                id="ChecklistOptionsSum",
+                options=[
+                    {"label": "Show total", "value": "showTotal", "disabled": True},
+                ],
+                value=["showTotal"],
+                labelStyle={"display": "inline-block"},
+                inputStyle={"margin-left": "20px", "margin-right": "5px"}
+            ),
+            dcc.Checklist(
+                id="ChecklistOptionsPeaks",
+                options=[
+                    {"label": "Show peaks", "value": "showPeaks"}
+                ],
+                value=[],
+                labelStyle={"display": "inline-block"},
+                inputStyle={"margin-left": "20px", "margin-right": "5px"}
+            ),
+
+            dcc.Checklist(
+                id="ChecklistOptionsDeclineCurve",
+                options=[
+                    {"label": "Arpes decline curve", "value": "showArpes"},
+                    {"label": "Duong decline curve", "value": "showDuong"}
+                ],
+                value=[],
+                labelStyle={"display": "inline-block"},
+                inputStyle={"margin-left": "20px", "margin-right": "5px"}
+            ),
+
+            html.Div(id='slider-output-container'),
+            html.H5("Number of months to predict:"),
+            dcc.Slider(
+                id="slider_numberofmonths",
+                min=1,
+                max=100,
+                marks={
+                    1: '1',
+                    20: '20',
+                    40: '40',
+                    60: '60',
+                    80: '80',
+                    100: '100'
+                },
+                tooltip={"placement": "bottom", "always_visible": True},
+                step=1,
+                value=20),
+            html.Div([
+                dbc.Row(dcc.Graph(id="dca-graph")),
+            ], style={"height": "200", "width": "80vh"}),
+            html.Div([
+                # dcc.Markdown("""
+                #     **Selection Data**
+
+                #     Choose the lasso or rectangle tool in the graph's menu
+                #     bar and then select points in the graph.
+
+                #     Note that if `layout.clickmode = 'event+select'`, selection data also
+                #     accumulates (or un-accumulates) selected data if you hold down the shift
+                #     button while clicking.
+                # """),
+                dbc.Row([
+                    dbc.Col(
+                        html.Pre(id='selected-data-printout', style={'whiteSpace': 'pre-line'}), md=2),
+                    dbc.Col(
+                        html.Pre(id='DCA-parameters-printout', style={'whiteSpace': 'pre-line'}), md=2),
+                ])
+            ], className='three columns'),
+        ],
+        body=True,
+        color="#F9F9F9",
+    )
+
+def PROBABILISTIC_card():
+    return dbc.Card(
+        [
+            html.H2("Probabilistic Analysis"),
+            
+            # Economic limit production rate input
+            html.H5("Economic limit production rate qa:"),
+            dbc.Input(type="number", id='inputqa', value=10000),
+            
+            # Output display for text (Np output)
+            html.Div(id='textarea-Np-output', style={'whiteSpace': 'pre-line'}),
+            
+            dbc.Row([
+                # Graph for uncertainty analysis
+                dbc.Col(dcc.Graph(id="uncertainty-graph"), md=6),
+                
+                dbc.Col([
+                    # Radio buttons for selecting probability distribution
+                    dbc.Row([
+                        dcc.RadioItems(
+                            id='prob-dist-button',
+                            options=[
+                                {"label": "Triangular", "value": "Triangular"},
+                                {"label": "Normal", "value": "Normal"},
+                            ],
+                            value="Triangular",  # Default to Triangular
+                            labelStyle={'display': 'block'}
+                        )
+                    ]),
+                    
+                    # Inputs for Triangular distribution
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.InputGroup([
+                                dbc.InputGroupText("Triangular left:"),                        
+                                dbc.Input(id="Triangular-left", type="number", placeholder="%", value=20, min=0, max=100)
+                            ])
+                        ]),
+                        dbc.Col([
+                            dbc.InputGroup([
+                                dbc.InputGroupText("Triangular right:"),                        
+                                dbc.Input(id="Triangular-right", type="number", placeholder="%", value=20, min=0, max=100)
+                            ])
+                        ])
+                    ]),
+                    
+                    # Input for Normal distribution
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.InputGroup([
+                                dbc.InputGroupText("Normal STD % mean:"),                        
+                                dbc.Input(id="Normal-std", type="number", placeholder="%", value=30, min=0, max=100)
+                            ])
+                        ])
+                    ])
+                ], md=6)
+            ])
+        ],
+        body=True,
+        color="#F9F9F9",
+    )
