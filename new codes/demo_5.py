@@ -84,14 +84,6 @@ def update_output(icontents, ifilename, x_var, y_var, s_var, graph_type):
         # Sort the sliced data
         sdf = sdf.sort_index()
 
-
-        # # Print the slice of data from s_var-1 to s_var if s_var is provided
-        # if s_var:
-        #     start_idx = max(0, s_var - 1)
-        #     print(dff.iloc[start_idx:s_var + 1])
-        # else:
-        #     print(dff)
-
         # Default figure structure if no variables are selected
         figure = {'data': [], 'layout': {'title': 'Data Preview'}}
 
@@ -107,6 +99,16 @@ def update_output(icontents, ifilename, x_var, y_var, s_var, graph_type):
                     'yaxis': {'title': ', '.join(y_var)}
                 }
             }
+
+            # Add a new trace for the points you want to show differently
+            if not dffPeaks.empty:
+                figure['data'].append({
+                    'x': dffPeaks[x_var],
+                    'y': dffPeaks[y_var[0]],  # Assuming you want to highlight the first y variable
+                    'mode': 'markers',
+                    'marker': {'color': 'red', 'size': 5},
+                    'name': 'Peaks'
+                })
         
         # Return all the options and the figure
         return checklist_options, dff.to_json(date_format='iso', orient='split'), dropdown_options, dropdown_options, slice_selector, figure
