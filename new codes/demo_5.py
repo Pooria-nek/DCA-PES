@@ -22,6 +22,10 @@ app.layout = html.Div(children=[
         dbc.Col(UPDATE_card(), width=6),
         dbc.Col(PREVIEW_card(), width=6),
     ]),
+    dbc.Spinner(html.Div(id="loading-output")),
+    html.Div(id='error-message', style={'color': 'red'}),
+    html.Button("Download Data", id="btn-download"),
+    dcc.Download(id="download-dataframe-csv")
 ])
 
 @app.callback(
@@ -31,7 +35,8 @@ app.layout = html.Div(children=[
         Output('x-variable', 'options'),
         Output('y-variable', 'options'),
         Output('slice_variable', 'options'),
-        Output('cluster-graph', 'figure')
+        Output('cluster-graph', 'figure'),
+        Output('error-message', 'children')
     ],
     [
         Input('upload-data', 'contents'),
@@ -111,14 +116,26 @@ def update_output(icontents, ifilename, x_var, y_var, s_var, graph_type):
                 })
         
         # Return all the options and the figure
-        return checklist_options, dff.to_json(date_format='iso', orient='split'), dropdown_options, dropdown_options, slice_selector, figure
+        return checklist_options, dff.to_json(date_format='iso', orient='split'), dropdown_options, dropdown_options, slice_selector, figure, ""
 
     except Exception as e:
         print("Error processing file:", e)
         return [{}], None, [], [], [], {
             'data': [],
             'layout': {'title': 'Error: Could not process file', 'xaxis': {}, 'yaxis': {}}
-        }
+        }, f"Error processing file: {e}"
+
+@app.callback(
+    Output("download-dataframe-csv", "data"),
+    Input("btn-download", "n_clicks"),
+    State('dataframevalue', 'data'),
+    prevent_initial_call=True
+)
+def download_data(n_clicks, data):
+    if data is None:
+        raise dash.exceptions.PreventUpdate
+    dff = pd.read_json(data, orient='split')
+    return dcc.send_data_frame(dff.to_csv, "processed_data.csv")
 
 def parse_data(contents, filename, date_columns=[]):
     """
