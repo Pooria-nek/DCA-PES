@@ -25,7 +25,7 @@ app.layout = html.Div(children=[
     ]),
     dbc.Row([
         dbc.Col(DETERMINISTIC_card(), width=6),
-        # dbc.Col(PROBABILISTIC_card(), width=6),
+        dbc.Col(PROBABILISTIC_card(), width=6),
     ]),
     dbc.Spinner(html.Div(id="loading-output")),
     html.Div(id='error-message', style={'color': 'red'}),
@@ -139,94 +139,94 @@ def download_data(n_clicks, data):
     dff = pd.read_json(data, orient='split')
     return dcc.send_data_frame(dff.to_csv, "processed_data.csv")
 
-@app.callback(
-    Output('dca-graph', 'figure'),
-    [
-        Input('ChecklistOptionsSum', 'value'),
-        Input('ChecklistOptionsPeaks', 'value'),
-        Input('ChecklistOptionsDeclineCurve', 'value'),
-        Input('slider_numberofmonths', 'value'),
-        State('dataframevalue', 'data')
-    ]
-)
-def update_deterministic_graph(show_total, show_peaks, decline_curve, num_months, data):
-    # if data is None:
-    #     raise dash.exceptions.PreventUpdate
+# @app.callback(
+#     Output('dca-graph', 'figure'),
+#     [
+#         Input('ChecklistOptionsSum', 'value'),
+#         Input('ChecklistOptionsPeaks', 'value'),
+#         Input('ChecklistOptionsDeclineCurve', 'value'),
+#         Input('slider_numberofmonths', 'value'),
+#         State('dataframevalue', 'data')
+#     ]
+# )
+# def update_deterministic_graph(show_total, show_peaks, decline_curve, num_months, data):
+#     # if data is None:
+#     #     raise dash.exceptions.PreventUpdate
 
-    dff = pd.read_json(data, orient='split')
-    print("Data for deterministic graph:")
-    print(dff)
-    figure = {'data': [], 'layout': {'title': 'Deterministic Analysis'}}
+#     dff = pd.read_json(data, orient='split')
+#     print("Data for deterministic graph:")
+#     print(dff)
+#     figure = {'data': [], 'layout': {'title': 'Deterministic Analysis'}}
 
-    # Add traces based on the checklist options
-    if 'showTotal' in show_total:
-        numeric_dff = dff.select_dtypes(include=[np.number])  # Select only numeric columns
-        figure['data'].append({
-            'x': numeric_dff.index,
-            'y': numeric_dff.sum(axis=1),
-            'type': 'line',
-            'name': 'Total'
-        })
+#     # Add traces based on the checklist options
+#     if 'showTotal' in show_total:
+#         numeric_dff = dff.select_dtypes(include=[np.number])  # Select only numeric columns
+#         figure['data'].append({
+#             'x': numeric_dff.index,
+#             'y': numeric_dff.sum(axis=1),
+#             'type': 'line',
+#             'name': 'Total'
+#         })
 
-    if 'showPeaks' in show_peaks:
-        peaks, _ = find_peaks(dff.iloc[:, 0])  # Assuming the first column for simplicity
-        figure['data'].append({
-            'x': dff.index[peaks],
-            'y': dff.iloc[peaks, 0],
-            'mode': 'markers',
-            'marker': {'color': 'red', 'size': 5},
-            'name': 'Peaks'
-        })
+#     if 'showPeaks' in show_peaks:
+#         peaks, _ = find_peaks(dff.iloc[:, 0])  # Assuming the first column for simplicity
+#         figure['data'].append({
+#             'x': dff.index[peaks],
+#             'y': dff.iloc[peaks, 0],
+#             'mode': 'markers',
+#             'marker': {'color': 'red', 'size': 5},
+#             'name': 'Peaks'
+#         })
 
-    # Add decline curve traces
-    if 'showArps' in decline_curve:
-        # Example Arps decline curve logic
-        # Assuming 'time' is the index and 'production' is the column to fit the curve
+#     # Add decline curve traces
+#     if 'showArps' in decline_curve:
+#         # Example Arps decline curve logic
+#         # Assuming 'time' is the index and 'production' is the column to fit the curve
 
-        def arps_decline(t, qi, di, b):
-            return qi / ((1 + b * di * t) ** (1 / b))
+#         def arps_decline(t, qi, di, b):
+#             return qi / ((1 + b * di * t) ** (1 / b))
 
-        time = np.arange(len(dff))
-        production = dff.iloc[:, 0]  # Assuming the first column for simplicity
+#         time = np.arange(len(dff))
+#         production = dff.iloc[:, 0]  # Assuming the first column for simplicity
 
-        # Fit the Arps decline curve
-        try:
-            popt, _ = curve_fit(arps_decline, time, production, maxfev=10000)
-            qi, di, b = popt
+#         # Fit the Arps decline curve
+#         try:
+#             popt, _ = curve_fit(arps_decline, time, production, maxfev=10000)
+#             qi, di, b = popt
 
-            # Generate fitted values
-            fitted_values = arps_decline(time, qi, di, b)
+#             # Generate fitted values
+#             fitted_values = arps_decline(time, qi, di, b)
 
-            # Add the fitted curve to the figure
-            figure['data'].append({
-                'x': dff.index,
-                'y': fitted_values,
-                'type': 'line',
-                'name': 'Arps Decline Curve',
-                'line': {'dash': 'dash'}
-            })
-        except Exception as e:
-            print("Error fitting Arps decline curve:", e)
+#             # Add the fitted curve to the figure
+#             figure['data'].append({
+#                 'x': dff.index,
+#                 'y': fitted_values,
+#                 'type': 'line',
+#                 'name': 'Arps Decline Curve',
+#                 'line': {'dash': 'dash'}
+#             })
+#         except Exception as e:
+#             print("Error fitting Arps decline curve:", e)
 
-    if 'showDuong' in decline_curve:
-        # Add Duong decline curve logic here
-        pass
+#     if 'showDuong' in decline_curve:
+#         # Add Duong decline curve logic here
+#         pass
 
-    print("Figure data:")
-    print(figure['data'])
-    return figure
+#     print("Figure data:")
+#     print(figure['data'])
+#     return figure
 
-@app.callback(
-    Output('uncertainty-graph', 'figure'),
-    [
-        Input('inputqa', 'value'),
-        Input('prob-dist-button', 'value'),
-        Input('Triangular-left', 'value'),
-        Input('Triangular-right', 'value'),
-        Input('Normal-std', 'value'),
-        State('dataframevalue', 'data')
-    ]
-)
+# @app.callback(
+#     Output('uncertainty-graph', 'figure'),
+#     [
+#         Input('inputqa', 'value'),
+#         Input('prob-dist-button', 'value'),
+#         Input('Triangular-left', 'value'),
+#         Input('Triangular-right', 'value'),
+#         Input('Normal-std', 'value'),
+#         State('dataframevalue', 'data')
+#     ]
+# )
 # def update_probabilistic_graph(qa, dist_type, tri_left, tri_right, norm_std, data):
 #     if data is None:
 #         raise dash.exceptions.PreventUpdate

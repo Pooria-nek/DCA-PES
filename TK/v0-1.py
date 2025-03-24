@@ -1,8 +1,9 @@
 import pandas as pd
 import tkinter as tk
-from tkinter import filedialog, ttk, messagebox
+from tkinter import filedialog, ttk, messagebox, simpledialog
 import matplotlib.pyplot as plt
 import seaborn as sns
+import numpy as np
 
 class CSVVisualizerApp:
     def __init__(self, root):
@@ -20,14 +21,19 @@ class CSVVisualizerApp:
 
         # Dropdown for selecting plot type
         self.plot_type = tk.StringVar(value="Line Plot")
-        self.plot_dropdown = ttk.Combobox(root, textvariable=self.plot_type, values=["Line Plot", "Scatter Plot", "Histogram"])
+        self.plot_dropdown = ttk.Combobox(root, textvariable=self.plot_type, values=["Line Plot", "Scatter Plot", "Histogram", "Decline Curve"])
         self.plot_dropdown.pack(pady=5)
 
         # Button to visualize data
         self.btn_plot = tk.Button(root, text="Visualize Data", command=self.visualize_data, font=("Arial", 12))
         self.btn_plot.pack(pady=10)
 
+        self.start_date = None
+        self.end_date = None
+        self.count_date = None
+
         self.df = None  # Data storage
+        self.dc = None  # Decline Curves
 
     def load_csv(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
@@ -76,9 +82,18 @@ class CSVVisualizerApp:
         
         col1, col2 = self.df.columns[:2]  # Use first two columns
 
+        self.start_date = self.df[col1].iloc[0]
+        self.end_date = self.df[col1].iloc[-1]
+        self.count_date = len(self.df[col1])
+
+        print(f"Start Date: {self.start_date}")
+        print(f"End Date: {self.end_date}")
+        print(f"Count Date: {self.count_date}")
+
         plt.figure(figsize=(8, 5))
         
         if plot_type == "Line Plot":
+            print(self.df)
             plt.plot(self.df[col1], self.df[col2], marker="o", linestyle="-")
             plt.xlabel(col1)
             plt.ylabel(col2)
@@ -92,7 +107,42 @@ class CSVVisualizerApp:
             sns.histplot(self.df[col1], bins=20, kde=True)
             plt.title("Histogram")
 
+        elif plot_type == "Decline Curve":
+            self.plot_decline_curve(col1, col2)
+
         plt.show()
+
+    def plot_decline_curve(self, x_col, y_col):
+        """ Plot Decline Curves in green color. """
+
+        # Generate dates from start_date to end_date
+        date_range = pd.date_range(start=self.start_date, end=self.end_date, periods=self.count_date)
+        
+        # Create random data for x_col
+        x_data = self.df[x_col]
+
+        # Create a decline curve for y_col
+        # Assuming exponential decline for demonstration purposes
+        start_value = self.df[y_col].iloc[0]
+
+        # Prompt user to input decline rate
+        decline_rate = simpledialog.askfloat("Input", "Enter decline rate:", minvalue=0.0, maxvalue=1.0)
+        if decline_rate is None:
+            return
+
+        y_data = start_value * np.exp(-decline_rate * np.arange(self.count_date))
+        
+        # Create DataFrame with generated data
+        self.dc = pd.DataFrame({x_col: x_data, y_col: y_data})
+
+        print(self.dc)
+
+        plt.plot(self.df[x_col], self.df[y_col], marker="o", linestyle="-", label="Original Data")
+        plt.plot(self.dc[x_col], self.dc[y_col], marker="o", linestyle="-", color="green", label="Decline Curve")
+        plt.xlabel(x_col)
+        plt.ylabel(y_col)
+        plt.title("Decline Curve")
+        plt.legend()
 
 # Run the application
 if __name__ == "__main__":
