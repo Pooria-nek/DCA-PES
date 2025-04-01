@@ -4,6 +4,7 @@ from tkinter import filedialog, ttk, messagebox, simpledialog
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+from scipy.signal import argrelextrema, find_peaks
 
 class CSVVisualizerApp:
     def __init__(self, root):
@@ -21,7 +22,7 @@ class CSVVisualizerApp:
 
         # Dropdown for selecting plot type
         self.plot_type = tk.StringVar(value="Line Plot")
-        self.plot_dropdown = ttk.Combobox(root, textvariable=self.plot_type, values=["Line Plot", "Scatter Plot", "Histogram", "Decline Curve"])
+        self.plot_dropdown = ttk.Combobox(root, textvariable=self.plot_type, values=["Line Plot", "Scatter Plot", "Decline Curve"])
         self.plot_dropdown.pack(pady=5)
 
         # Button to visualize data
@@ -32,7 +33,8 @@ class CSVVisualizerApp:
         self.end_date = None
         self.count_date = None
 
-        self.df = None  # Data storage
+        self.df = None  # Data frame
+        self.cdf = None  # clean Data frame
         self.dc = None  # Decline Curves
 
     def load_csv(self):
@@ -42,12 +44,42 @@ class CSVVisualizerApp:
         
         try:
             self.df = pd.read_csv(file_path)
+            
+            # Remove minima from the second column (if applicable)
+            if len(self.df.columns) > 1:
+                y_col = self.df.columns[1]
+                self.df[y_col] = self.removeMinima(self.df[y_col], factor=1.2)
+            
             self.show_data_preview()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load file: {e}")
 
+    #%% Removes outliers and fills missing data with interpolation
+    def removeMinima(self, data, factor):
+        if data.empty:
+            return data    
+        if data.isnull().all():
+            return data
+        A = -data.diff()
+        threshholdDiff = (A[A > 0]).median(skipna=True)
+        M = -data
+        indices = find_peaks(M, prominence=threshholdDiff * factor)[0]
+        data.iloc[indices] = np.nan
+        return data.interpolate()
+
+    def findPeaks(self, data):
+        """ Find peaks in the data. """
+        M = pd.concat([pd.Series([0]), data])    
+        M = M.to_numpy()    
+        ### IMPORTANT ### order should be defined by user
+        indices = argrelextrema(M, np.greater, order=6)
+        indices = np.asarray(indices) - 1
+        indices = indices.flatten()
+
+        return indices
+
     def show_data_preview(self):
-        """ Display first few rows in the treeview (table). """
+        """ Display first few rows in the treeview (table) and highlight peak positions. """
         if self.df is None or self.df.empty:
             return
         
@@ -66,6 +98,16 @@ class CSVVisualizerApp:
         # Add rows (show first 10 rows)
         for _, row in self.df.head(1000).iterrows():
             self.tree.insert("", "end", values=list(row))
+
+        # Highlight peak positions in the second column (if applicable)
+        if len(self.df.columns) > 1:
+            y_col = self.df.columns[1]
+            peaks = self.findPeaks(self.df[y_col])
+            for peak in peaks:
+                self.tree.item(self.tree.get_children()[peak], tags=("peak",))
+
+        # Add tag styling for peaks
+        self.tree.tag_configure("peak", background="lightblue")
 
     def visualize_data(self):
         """ Generate plots based on selected type. """
@@ -102,10 +144,6 @@ class CSVVisualizerApp:
         elif plot_type == "Scatter Plot":
             sns.scatterplot(data=self.df, x=col1, y=col2)
             plt.title("Scatter Plot")
-
-        elif plot_type == "Histogram":
-            sns.histplot(self.df[col1], bins=20, kde=True)
-            plt.title("Histogram")
 
         elif plot_type == "Decline Curve":
             self.plot_decline_curve(col1, col2)
