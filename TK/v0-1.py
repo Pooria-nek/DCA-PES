@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from scipy.signal import argrelextrema, find_peaks
+import scipy.stats
 
 class CSVVisualizerApp:
     def __init__(self, root):
@@ -35,7 +36,14 @@ class CSVVisualizerApp:
 
         self.df = None  # Data frame
         self.cdf = None  # clean Data frame
+        self.pdf = None  # peaks of Data frame
         self.dc = None  # Decline Curves
+
+        # self.maxpoints = []
+        # self.minpoints = []
+        self.minima = []
+        self.maxima = []
+        self.peaks = []
 
     def load_csv(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
@@ -44,11 +52,14 @@ class CSVVisualizerApp:
         
         try:
             self.df = pd.read_csv(file_path)
+            self.cdf = self.df.copy()
             
             # Remove minima from the second column (if applicable)
-            if len(self.df.columns) > 1:
-                y_col = self.df.columns[1]
-                self.df[y_col] = self.removeMinima(self.df[y_col], factor=1.2)
+            if len(self.cdf.columns) > 1:
+                y_col = self.cdf.columns[1]
+                self.cdf[y_col] = self.removeMinima(self.cdf[y_col], factor=1.2)
+                # self.df = self.removeOutliers(self.df, y_col, zScoreThreshhold=3.5)
+            
             
             self.show_data_preview()
         except Exception as e:
@@ -65,7 +76,22 @@ class CSVVisualizerApp:
         M = -data
         indices = find_peaks(M, prominence=threshholdDiff * factor)[0]
         data.iloc[indices] = np.nan
+        # print(f"Indices of minima: {indices}")
+        self.minima = indices
+        print(f"Minima: {self.minima}")
         return data.interpolate()
+    
+    # def removeOutliers(df, fieldName,zScoreThreshhold):
+    #     #remove outliers in oil production
+    #     if df.empty:
+    #         return df
+    #     df=df.replace({np.nan:0})
+    #     df=df[(np.abs(scipy.stats.zscore(df[fieldName])) < zScoreThreshhold)]
+    #     #plotProductionData(df, 'Outliers removed')
+        
+    #     # replace 0 values with nan
+    #     df=df.replace({0: np.nan})
+    #     return df
 
     def findPeaks(self, data):
         """ Find peaks in the data. """
@@ -75,7 +101,8 @@ class CSVVisualizerApp:
         indices = argrelextrema(M, np.greater, order=6)
         indices = np.asarray(indices) - 1
         indices = indices.flatten()
-
+        self.peaks = indices
+        print(f"Peaks: {self.peaks}")
         return indices
 
     def show_data_preview(self):
@@ -87,27 +114,33 @@ class CSVVisualizerApp:
         self.tree.delete(*self.tree.get_children())
 
         # Set column names
-        self.tree["columns"] = list(self.df.columns)
+        self.tree["columns"] = ["Index"] + list(self.df.columns)
         self.tree["show"] = "headings"
 
         # Add column headings
+        self.tree.heading("Index", text="Index")
+        self.tree.column("Index", anchor="center", width=50)
         for col in self.df.columns:
             self.tree.heading(col, text=col)
             self.tree.column(col, anchor="center", width=100)
 
-        # Add rows (show first 10 rows)
-        for _, row in self.df.head(1000).iterrows():
-            self.tree.insert("", "end", values=list(row))
+        # Add rows (show first 1000 rows)
+        for idx, row in self.df.head(1000).iterrows():
+            self.tree.insert("", "end", values=[idx] + list(row))
 
         # Highlight peak positions in the second column (if applicable)
         if len(self.df.columns) > 1:
             y_col = self.df.columns[1]
             peaks = self.findPeaks(self.df[y_col])
-            for peak in peaks:
+            for peak in self.peaks:
                 self.tree.item(self.tree.get_children()[peak], tags=("peak",))
+
+        for minima in self.minima:
+            self.tree.item(self.tree.get_children()[minima], tags=("minima",))
 
         # Add tag styling for peaks
         self.tree.tag_configure("peak", background="lightblue")
+        self.tree.tag_configure("minima", background="#FF6666")
 
     def visualize_data(self):
         """ Generate plots based on selected type. """
@@ -135,20 +168,56 @@ class CSVVisualizerApp:
         plt.figure(figsize=(8, 5))
         
         if plot_type == "Line Plot":
+            # Plot line graph for both original and cleaned data
+            self.plot_line(col1, col2)
             print(self.df)
-            plt.plot(self.df[col1], self.df[col2], marker="o", linestyle="-")
-            plt.xlabel(col1)
-            plt.ylabel(col2)
-            plt.title("Line Plot")
 
         elif plot_type == "Scatter Plot":
-            sns.scatterplot(data=self.df, x=col1, y=col2)
-            plt.title("Scatter Plot")
+            # Plot scatter graph
+            self.plot_scatter(col1, col2)
+            print(self.df)
+            # sns.scatterplot(data=self.df, x=col1, y=col2)
+            # plt.title("Scatter Plot")
 
         elif plot_type == "Decline Curve":
             self.plot_decline_curve(col1, col2)
+            print(self.df)
+
+        else:
+            messagebox.showerror("Error", "Invalid plot type selected.")
+            return
 
         plt.show()
+
+    def plot_line(self, x_col, y_col):
+        """ Plot line graph. """
+        plt.plot(self.df[x_col], self.df[y_col], marker="o", linestyle="-", label="Original Data")
+        plt.plot(self.cdf[x_col], self.cdf[y_col], marker="o", linestyle="-", color="green", label="Cleaned Data")
+        plt.legend()
+        plt.xticks(rotation=60)
+        plt.tight_layout()
+        # plt.grid()
+        # plt.axhline(0, color='black', lw=0.5, ls='--')
+        # plt.axvline(0, color='black', lw=0.5, ls='--')
+        # plt.fill_between(self.df[x_col], self.df[y_col], color="lightblue", alpha=0.5)
+        # plt.fill_between(self.cdf[x_col], self.cdf[y_col], color="lightgreen", alpha=0.5)
+        plt.xlabel(x_col)
+        plt.ylabel(y_col)
+        plt.title("Line Plot")
+
+    def plot_scatter(self, x_col, y_col):
+        """ Plot scatter graph. """
+        plt.scatter(self.df[x_col], self.df[y_col], marker="o")
+        plt.xlabel(x_col)
+        plt.ylabel(y_col)
+        plt.title("Scatter Plot")
+
+    def plot_histogram(self, x_col):
+        """ Plot histogram. """
+        plt.hist(self.df[x_col], bins=30, alpha=0.7)
+        plt.xlabel(x_col)
+        plt.ylabel("Frequency")
+        plt.title("Histogram")
 
     def plot_decline_curve(self, x_col, y_col):
         """ Plot Decline Curves in green color. """
@@ -177,6 +246,9 @@ class CSVVisualizerApp:
 
         plt.plot(self.df[x_col], self.df[y_col], marker="o", linestyle="-", label="Original Data")
         plt.plot(self.dc[x_col], self.dc[y_col], marker="o", linestyle="-", color="green", label="Decline Curve")
+        plt.legend()
+        plt.xticks(rotation=45)
+        plt.tight_layout()
         plt.xlabel(x_col)
         plt.ylabel(y_col)
         plt.title("Decline Curve")
