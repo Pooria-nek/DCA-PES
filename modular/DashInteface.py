@@ -10,10 +10,13 @@ import plotly.graph_objs as go
 from dash.dependencies import Input, Output, State
 from dash import dash_table
 import numpy as np
-from DCA04 import  *
 import pickle
 import json
 
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from modular.DCA04 import *
 
 
 external_stylesheets = [
@@ -934,76 +937,75 @@ def make_graph(icontents, ifilename,  xvalue, yvalue,ChecklistOptionsPeaks,Check
 #---------------------PARSE _ DATA---------------------------------------------
 #------------------------------------------------------------------------------
 def parse_data(contents, filename, ChecklistOptionsMonth):
-    # sample_list = [contents, filename, ChecklistOptionsMonth]
-    # file_name = "GraphSelectedData.pkl"
-    # open_file = open(file_name, "wb")
-    # pickle.dump(sample_list, open_file)
-    # open_file.close()
-
-    content_type, content_string = contents.split(",")
-
-    decoded = base64.b64decode(content_string)
     try:
-        if "csv" in filename:
-            # Assume that the user uploaded a CSV or TXT file
+        print(f"Parsing file: {filename}")
+
+        # Decode the uploaded content
+        content_type, content_string = contents.split(",")
+        decoded = base64.b64decode(content_string)
+
+        # Load file based on extension
+        if filename.endswith(".csv"):
             df = pd.read_csv(io.StringIO(decoded.decode("utf-8")))
-        elif "xls" in filename:
-            # Assume that the user uploaded an excel file
+        elif filename.endswith((".xls", ".xlsx")):
             df = pd.read_excel(io.BytesIO(decoded))
-        elif "txt" or "tsv" in filename:
-            # Assume that the user upl, delimiter = r'\s+'oaded an excel file
+        elif filename.endswith((".txt", ".tsv")):
             df = pd.read_csv(io.StringIO(decoded.decode("utf-8")), delimiter=r"\s+")
+        else:
+            raise ValueError("Unsupported file type")
+
+        # Clean empty values
+        df.replace({0: np.nan, r'^\s*$': np.nan}, regex=True, inplace=True)
+        df.dropna(axis='columns', how='all', inplace=True)
+
+        # Add filename prefix to columns (for uniqueness)
+        df.columns = [f"{filename} : {col}" for col in df.columns]
+
+        # Detect and parse datetime columns
+        for col in df.columns:
+            if df[col].dtype == 'object':
+                try:
+                    df[col] = pd.to_datetime(df[col])
+                except Exception:
+                    pass
+
+        datetime_cols = df.select_dtypes(include=["datetime64[ns]"])
+        if datetime_cols.empty:
+            raise ValueError("No valid datetime column found.")
+
+        # Rename the first datetime column to 'Date'
+        date_col = datetime_cols.columns[0]
+        df.rename(columns={date_col: "Date"}, inplace=True)
+        date_col = "Date"
+
+        # Resample by month if specified
+        if 'Month' in ChecklistOptionsMonth:
+            df.set_index(date_col, inplace=True)
+            df = df.resample("MS").mean().reset_index()
+
+        # Prepare peaks DataFrame
+        dfPeaks = pd.DataFrame(df[date_col])
+
+        for col in df.columns:
+            if col == date_col or df[col].isnull().all():
+                continue
+
+            df = removeMinima(df, col, 1.2)
+            # df = fillMissingDates(df, date_col) # Uncomment if you want to fill missing dates
+            df = removeOutliers(df, col, 3.5)
+            df = fillMissingDates(df, date_col)
+
+            peaks_idx = findPeaks(df, col, 1.0)
+            peaks_data = df[[col]].iloc[peaks_idx]
+            dfPeaks = pd.concat([dfPeaks, peaks_data], axis=1)
+
+        return df.reset_index(drop=True), dfPeaks.reset_index(drop=True), date_col
+
     except Exception as e:
-        print(e)
-        return html.Div(["There was an error processing this file."])
-
-    # drop empty cols    
-    df = df.replace({0: np.nan})
-    df = df.replace(r'^s*$', np.NaN, regex=True) 
-    df = df.dropna(axis='columns', how='all')    
-    str=filename+"  : "
-    strcols=[str + s for s in df.columns]
-    df.columns=strcols    
-    # find date column
-    df = df.replace({0: np.nan})
-    for col in df.columns:
-        if df[col].dtype == 'object':
-            try:
-                df[col] = pd.to_datetime(df[col])
-            except ValueError:
-                pass
-    dateColdf = df.select_dtypes(include=['datetime64[ns]'])
-    dateColIdx = dateColdf.columns[0]
-    df= df.rename(columns={dateColIdx: 'Date'})
-    dateColIdx='Date'
-    if 'Month' in(ChecklistOptionsMonth):       
-        # df[xvalue]=df[xvalue].astype('datetime64[ns]')
-        df=df.set_index(dateColIdx)
-        df=df.resample("MS").mean()    
-        df=df.reset_index()
+        print(f"❌ Error while parsing data: {e}")
+        return None, None, None
     
-    # df=df.set_index(dateColIdx)
-
-    dfPeaks=pd.DataFrame(df[dateColIdx])
-    # dfPeaks['ShowOnGraph'] = False    
-    for col in df.columns:
-        if col!=dateColIdx:
-            if df[col].isnull().all()!=True:
-            
-                df = removeMinima(df, col, 1.2)
-                df=fillMissingDates(df,dateColIdx)
-                df = removeOutliers(df, col, 3.5)
-                df=fillMissingDates(df,dateColIdx)
-                indices = findPeaks(df, col, 1.0)
-                dfPeaksCol = df[[col]].iloc[indices, :]
-                dfPeaks = pd.concat([dfPeaks, dfPeaksCol], axis=1)
-                # dfPeaks['ShowOnGraph'].loc[indices] = True
-    df=df.reset_index()
-    dfPeaks=dfPeaks.reset_index()
-        
-
-
-    return df, dfPeaks, dateColIdx
+    
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
 def computeArpes(df,dfPeaks,xvalue,yy,qa,numberOfMonths,triangularLeft,triangularRight,normalSTD,DistRadioButton):

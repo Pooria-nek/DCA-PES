@@ -8,19 +8,48 @@ from scipy.optimize import curve_fit
 import matplotlib.dates as mdates
 from scipy.optimize import fsolve
 from scipy.integrate import quad
+from scipy.stats import zscore
+from scipy.signal import argrelextrema
 
-
-def removeOutliers(df, fieldName,zScoreThreshhold):
-    #remove outliers in oil production
-    if df.empty:
-        return df
-    df=df.replace({np.nan:0})
-    df=df[(np.abs(scipy.stats.zscore(df[fieldName])) < zScoreThreshhold)]
-    #plotProductionData(df, 'Outliers removed')
+# def removeOutliers(df, fieldName,zScoreThreshhold):
+#     #remove outliers in oil production
+#     if df.empty:
+#         return df
+#     df=df.replace({np.nan:0})
+#     df=df[(np.abs(scipy.stats.zscore(df[fieldName])) < zScoreThreshhold)]
+#     #plotProductionData(df, 'Outliers removed')
     
-    # replace 0 values with nan
-    df=df.replace({0: np.nan})
-    return df
+#     # replace 0 values with nan
+#     df=df.replace({0: np.nan})
+#     return df
+
+def removeOutliers(df: pd.DataFrame, fieldName: str, zScoreThreshold: float = 3.0) -> pd.DataFrame:
+    """
+    حذف مقادیر پرت از ستون مشخص‌شده با استفاده از z-score.
+
+    Args:
+        df (pd.DataFrame): دیتافریم ورودی.
+        fieldName (str): نام ستون مورد نظر برای حذف پرت‌ها.
+        zScoreThreshold (float): آستانه Z-Score برای تشخیص پرت‌ها.
+
+    Returns:
+        pd.DataFrame: دیتافریم بدون مقادیر پرت.
+    """
+    if df.empty or fieldName not in df.columns:
+        return df
+
+    # حذف ردیف‌هایی که مقدار NaN دارند (برای محاسبه z-score دقیق‌تر)
+    df_clean = df.copy()
+    df_clean = df_clean[df_clean[fieldName].notna()]
+
+    # محاسبه z-score و فیلتر کردن داده‌های غیر پرت
+    z_scores = zscore(df_clean[fieldName])
+    df_filtered = df_clean[(np.abs(z_scores) < zScoreThreshold)]
+
+    # تبدیل مقادیر صفر به NaN برای پردازش‌های بعدی
+    df_filtered[fieldName] = df_filtered[fieldName].replace({0: np.nan})
+
+    return df_filtered
 
 def readDataFramefromcsvfile(filename):
     df = pd.read_csv(filename, thousands=',')
@@ -82,34 +111,96 @@ def plotProductionData(df, plotTitle,dfPeaksW=None,dfPeaksO=None, lw=1,mrk='.'):
 # dfOriginal=readDataFramefromcsvfile('HuntsvilleShale.csv')
 
 #------------------------------------------------------------------------------
-#%% Removes outliers and fills missing data with interpolation
-def removeMinima(df, fieldName, factor):
-    if df.empty:
-        return df    
-    if df[fieldName].isnull().all():
+def removeMinima(df: pd.DataFrame, fieldName: str, factor: float) -> pd.DataFrame:
+    """
+    حذف مینیمم‌های محلی (minima) از یک ستون مشخص در دیتافریم، با استفاده از یک آستانه بر اساس مشتق و ضریب.
+
+    Args:
+        df (pd.DataFrame): دیتافریم ورودی.
+        fieldName (str): نام ستونی که می‌خواهیم مینیمم‌هایش را حذف کنیم.
+        factor (float): ضریب برای تنظیم حساسیت حذف مینیمم‌ها.
+
+    Returns:
+        pd.DataFrame: دیتافریم با مینیمم‌های حذف‌شده (به‌صورت NaN).
+    """
+    if df.empty or fieldName not in df.columns:
         return df
-    A = -df[fieldName].diff()
-    threshholdDiff = (A[A > 0]).median(skipna=True)
-    M = -df[fieldName]
-    # M=pd.concat([pd.Series([0]), M])
-    indices = find_peaks(M,  prominence=threshholdDiff*factor)[0]
-    df.loc[indices, fieldName] = np.nan
+
+    series = df[fieldName]
+
+    if series.isnull().all():
+        return df
+
+    # اختلاف بین مقادیر متوالی معکوس‌شده برای تشخیص مینیمم‌ها
+    diffs = -series.diff()
+    threshold = diffs[diffs > 0].median(skipna=True)
+
+    if pd.isna(threshold) or threshold == 0:
+        return df  # برای جلوگیری از خطای find_peaks روی مقدار NaN یا صفر
+
+    # پیدا کردن مینیمم‌ها با استفاده از find_peaks روی مقادیر منفی
+    negative_series = -series
+    peaks, _ = find_peaks(negative_series, prominence=threshold * factor)
+
+    # جایگزینی مینیمم‌ها با NaN
+    df.loc[peaks, fieldName] = np.nan
+
     return df
 
 
-def fillMissingDates(df,dateCol):
-    if df.empty:
+# def fillMissingDates(df,dateCol):
+#     if df.empty:
+#         return df
+#     # add missing dates
+#     if (df[dateCol].loc[2]-df[dateCol].loc[1]).days>10:
+#         freqm='MS'
+#     else:
+#         freqm='D'
+#     r = pd.date_range(start=df[dateCol].min(), end=df[dateCol].max(), freq =freqm)
+#     df=df.set_index(dateCol).reindex(r).fillna(np.nan).rename_axis(dateCol).reset_index()   
+#     df=df.interpolate(method='linear')
+#     # df["WATER_LEVEL"]=df["WATER_LEVEL"].interpolate(method='cubic')
+#     # df["WATER_LEVEL"]=df["WATER_LEVEL"].interpolate(method='linear',limit_direction='backward' , limit=4 )    
+#     return df
+
+def fillMissingDates(df: pd.DataFrame, dateCol: str) -> pd.DataFrame:
+    """
+    تاریخ‌های گمشده را بر اساس فرکانس (روزانه یا ماهانه) اضافه کرده و مقادیر گمشده را با اینترپولیشن پر می‌کند.
+
+    Args:
+        df (pd.DataFrame): دیتافریم حاوی ستون تاریخ.
+        dateCol (str): نام ستون تاریخ.
+
+    Returns:
+        pd.DataFrame: دیتافریم با تاریخ‌های کامل و مقادیر اینترپول‌شده.
+    """
+    if df.empty or dateCol not in df.columns:
         return df
-    # add missing dates
-    if (df[dateCol].loc[2]-df[dateCol].loc[1]).days>10:
-        freqm='MS'
-    else:
-        freqm='D'
-    r = pd.date_range(start=df[dateCol].min(), end=df[dateCol].max(), freq =freqm)
-    df=df.set_index(dateCol).reindex(r).fillna(np.nan).rename_axis(dateCol).reset_index()   
-    df=df.interpolate(method='linear')
-    # df["WATER_LEVEL"]=df["WATER_LEVEL"].interpolate(method='cubic')
-    # df["WATER_LEVEL"]=df["WATER_LEVEL"].interpolate(method='linear',limit_direction='backward' , limit=4 )    
+
+    # اطمینان از اینکه ستون تاریخ واقعاً datetime است
+    if not pd.api.types.is_datetime64_any_dtype(df[dateCol]):
+        df[dateCol] = pd.to_datetime(df[dateCol], errors='coerce')
+
+    df = df.dropna(subset=[dateCol])  # حذف ردیف‌هایی که ستون تاریخ ندارند
+
+    df = df.sort_values(dateCol).reset_index(drop=True)
+
+    # تشخیص نوع بازه زمانی (روزانه یا ماهانه)
+    inferred_freq = 'D'
+    if len(df) > 2:
+        delta = (df[dateCol].iloc[2] - df[dateCol].iloc[1]).days
+        if delta > 10:
+            inferred_freq = 'MS'
+
+    # ساختن بازه‌ی کامل زمانی
+    full_range = pd.date_range(start=df[dateCol].min(), end=df[dateCol].max(), freq=inferred_freq)
+
+    # بازچینش با استفاده از تاریخ کامل
+    df = df.set_index(dateCol).reindex(full_range).rename_axis(dateCol).reset_index()
+
+    # اینترپولیشن خطی برای پر کردن مقادیر گمشده
+    df = df.interpolate(method='linear')
+
     return df
 
 
@@ -150,27 +241,59 @@ def findPeaks0(df, fieldName, factor):
                     # plotProductionData(df, 'Data Peaks', dfPeaksW, dfPeaksO)
 
 #------------------------------------------------------------------------------
-#%%
-# import tkinter as tk
-# import tkinter.filedialog as fd
+# #%%
+# # import tkinter as tk
+# # import tkinter.filedialog as fd
 
-# root = tk.Tk()
-# filez = fd.askopenfilenames(parent=root, title='Choose a file')
-filez=['BarnettShaleJohnson.csv','WagnerRecordedData2018-2020.csv','WagnerUnitTotal.csv','BarnettShaleDenton.csv',
-       'BarnetteShaleTarrant.csv','BarnettShaleJohnson.csv','HuntsvilleShale.csv']
-#%%
-def findPeaks(df, fieldName, factor):
-    if df[fieldName].isnull().all():
-        return []
-    M=df[fieldName]
-    M=pd.concat([pd.Series([0]), M])    
-    M=M.to_numpy()    
-    ### IMPORTANT ### order should be define by user
-    indices = argrelextrema(M, np.greater, order=6)  # np.greater for maxima
-    indices=np.asarray(indices)-1
-    indices=indices.flatten()
+# # root = tk.Tk()
+# # filez = fd.askopenfilenames(parent=root, title='Choose a file')
+# filez=['BarnettShaleJohnson.csv','WagnerRecordedData2018-2020.csv','WagnerUnitTotal.csv','BarnettShaleDenton.csv',
+#        'BarnetteShaleTarrant.csv','BarnettShaleJohnson.csv','HuntsvilleShale.csv']
 
-    return indices
+# def findPeaks(df, fieldName, factor):
+#     if df[fieldName].isnull().all():
+#         return []
+#     M=df[fieldName]
+#     M=pd.concat([pd.Series([0]), M])    
+#     M=M.to_numpy()    
+#     ### IMPORTANT ### order should be define by user
+#     indices = argrelextrema(M, np.greater, order=6)  # np.greater for maxima
+#     indices=np.asarray(indices)-1
+#     indices=indices.flatten()
+
+#     return indices
+
+def findPeaks(df: pd.DataFrame, fieldName: str, order: int = 6) -> np.ndarray:
+    """
+    شناسایی نقاط اوج (local maxima) در یک ستون عددی از دیتافریم.
+
+    Args:
+        df (pd.DataFrame): دیتافریم ورودی.
+        fieldName (str): نام ستونی که باید در آن قله‌ها شناسایی شوند.
+        order (int): فاصله‌ی مورد نیاز برای مقایسه نقاط جهت یافتن قله‌ها.
+
+    Returns:
+        np.ndarray: آرایه‌ای از ایندکس‌هایی که قله‌ها را نشان می‌دهند.
+    """
+    if df.empty or fieldName not in df.columns:
+        return np.array([])
+
+    series = df[fieldName].dropna()
+
+    if series.empty:
+        return np.array([])
+
+    # افزودن مقدار صفر ابتدای سری جهت جلوگیری از جا افتادن قله اول
+    extended_series = pd.concat([pd.Series([0]), series]).to_numpy()
+
+    # شناسایی ایندکس قله‌ها با استفاده از argrelextrema
+    peaks_indices = argrelextrema(extended_series, np.greater, order=order)[0]
+
+    # جبران افست یک‌خانه‌ای بخاطر Series([0]) ابتدای داده
+    adjusted_indices = peaks_indices - 1
+
+    # حذف اندیس‌های منفی (ممکن است پیش بیاید)
+    return adjusted_indices[adjusted_indices >= 0]
 
 def Duong(t, q1,q_inf=0, a=0.1, m=0.1):
     global t0
