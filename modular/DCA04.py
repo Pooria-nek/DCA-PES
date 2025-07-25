@@ -2,20 +2,14 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.stats
-import time
-from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
 from scipy.signal import find_peaks
 from scipy.signal import argrelextrema
 from scipy.optimize import curve_fit
-from lmfit import Model
 import matplotlib.dates as mdates
-import statsmodels.formula.api as sm
-import statsmodels.tsa.seasonal as sms
-import peakutils
 from scipy.optimize import fsolve
 from scipy.integrate import quad
-###############################################################################
-#%% Reads csv files for water and oil production
+
+
 def removeOutliers(df, fieldName,zScoreThreshhold):
     #remove outliers in oil production
     if df.empty:
@@ -27,41 +21,36 @@ def removeOutliers(df, fieldName,zScoreThreshhold):
     # replace 0 values with nan
     df=df.replace({0: np.nan})
     return df
+
 def readDataFramefromcsvfile(filename):
-    # #plt.figure(figsize=(20,10))
-    df=pd.DataFrame(pd.read_csv(filename, thousands=','))
-    df.columns = ["Date", "OilMonthlyVol","WaterMonthlyVol","OilPriceWTI"]
-    df=df.replace({0: np.nan})
-
-    # df['OilMonthlyVol']=df['OilMonthlyVol'].str.replace(',', '').astype(float)
-    # df['WaterMonthlyVol']=df['WaterMonthlyVol'].str.replace(',', '').astype(float)
-    # df['OilPriceWTI']=df['OilPriceWTI'].str.replace(',', '').astype(float)
+    df = pd.read_csv(filename, thousands=',')
+    df.columns = ["Date", "OilMonthlyVol", "WaterMonthlyVol", "OilPriceWTI"]
     
-    # remove $ sign in currency fields 
-    df['OilPriceWTI'] = df['OilPriceWTI'].replace('[\$,]', '', regex=True).astype(float)
-
-    df['Date']=df['Date'].astype('datetime64[ns]')
-    # #plotProductionData(df, 'Original production data')
+    # جایگزین کردن 0 با NaN
+    df.replace(0, np.nan, inplace=True)
     
+    # حذف کاراکترهای $ و , در OilPriceWTI و تبدیل به float
+    df['OilPriceWTI'] = df['OilPriceWTI'].replace(r'[\$,]', '', regex=True).astype(float)
+        
+    # تبدیل ستون Date به datetime
+    df['Date'] = pd.to_datetime(df['Date'])
     
-    # df=removeOutliers(df,'OilMonthlyVol',1.2)
-    # df=removeOutliers(df,'WaterMonthlyVol',1.2)
-    # plotProductionData(df, 'Original production data with daily outliers removed')
+    # تنظیم ستون Date به عنوان ایندکس
+    df.set_index('Date', inplace=True)
 
-    df.index=df['Date']
-    data_columns = ["OilMonthlyVol","WaterMonthlyVol"]
-    df_rol= df[data_columns].rolling(window = 3, center = True).mean()
-    # df=df_rol
+    # محاسبه میانگین متحرک 3 دوره‌ای با پنجره مرکزی برای دو ستون مشخص
+    df_rol = df[["OilMonthlyVol", "WaterMonthlyVol"]].rolling(window=3, center=True).mean()
+    
+    # ریسامپل ماهانه (ابتدای ماه) و محاسبه میانگین
+    df = df.resample('MS').mean()
 
-    df=df.resample("MS").mean()    
-    # df['Date']=df['Date'].astype('datetime64[ns]')
-    df_rol=df_rol.reset_index()
-    # #plotProductionData(df_rol, 'Original rolled data')
-
-    df=df.reset_index()
-    # #plotProductionData(df, 'Original monthly averaged production data')
+    # ریست ایندکس برای هر دو دیتافریم (اگر نیاز به استفاده دارید)
+    df.reset_index(inplace=True)
+    df_rol.reset_index(inplace=True)
     
     return df
+
+
 def plotProductionData(df, plotTitle,dfPeaksW=None,dfPeaksO=None, lw=1,mrk='.'):
     # plt.figure(figsize=(20,10))
     plt.subplot(2,1,1)

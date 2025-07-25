@@ -1,327 +1,448 @@
-"""
-
-"""
 import base64
-import datetime
 import io
 import dash
 import dash_bootstrap_components as dbc
 from dash import dcc
-# import dash_core_components as dcc
-# import dash_html_components as html
 from dash import html
 from dash.exceptions import PreventUpdate
 import pandas as pd
 import plotly.graph_objs as go
 from dash.dependencies import Input, Output, State
-# import dash_table
 from dash import dash_table
-from os import listdir
-from os.path import isfile, join
 import numpy as np
 from DCA04 import  *
 import pickle
 import json
 
-# external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
-# app = dash.Dash(__name__,
-#                 external_stylesheets=external_stylesheets,
-#                 )
+
+
+external_stylesheets = [
+    dbc.themes.BOOTSTRAP,
+    "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+]
 styles = {
     'pre': {
         'border': 'thin lightgrey solid',
         'overflowX': 'scroll'
     }
 }
+app = dash.Dash(external_stylesheets=external_stylesheets)
 
-app = dash.Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
-#-----------------------------------------------------------------------------
-controls1 = dbc.Card(
+
+uploadSection = dbc.Card(
     [
-    #Upload files
-    html.H2("Data"),
-    html.Hr(),   
-    dbc.Row([
-        dbc.Row(children=[
-            dcc.Upload(
-            id='upload-data',
-            children=html.Div(["Drag and Drop or ", html.A("Select Files")]),
-            style={
-                "width": "100%",
-                "height": "60px",
-                "lineHeight": "60px",
-                "borderWidth": "1px",
-                "borderStyle": "dashed",
-                "borderRadius": "5px",
-                "textAlign": "center",
-                "margin": "10px",
-            },
-            # Allow multiple files to be uploaded
-            multiple=True,
-            ),
-            ],
-        ),
-        # Checklist
-        dbc.Row(children=[
-    
-            dbc.Row(children=[
-                html.H4("Select data columns",         style={"margin-left": "25px","margin-right": "5px"})],
+        html.H2([
+            html.I(className="bi bi-upload me-2"),
+            "Data"
+        ]),
+        html.Hr(),
+
+        # File Upload Section
+        dbc.Row([
+            dbc.Col([
+                dcc.Upload(
+                    id='upload-data',
+                    children=html.Div(["Drag and Drop or ", html.A("Select Files")]),
+                    style={
+                        "width": "100%",
+                        "height": "60px",
+                        "lineHeight": "60px",
+                        "borderWidth": "1px",
+                        "borderStyle": "dashed",
+                        "borderRadius": "5px",
+                        "textAlign": "center",
+                        "marginBottom": "5px",
+                    },
+                    multiple=True,
                 ),
-    
-            dbc.Row(children=[
+                html.Small("Upload CSV files with production data", className="text-muted", style={"marginLeft": "10px"}),
+            ]),
+        ]),
+
+        html.Br(),
+
+        # Checklist Section (dynamic options from callback)
+        dbc.Card(
+            dbc.CardBody([
+                html.H5("Select data columns", className="mb-2"),
                 dcc.Checklist(
                     id="checklistfiles",
-                    labelStyle={'display': 'block'},
-                    inputStyle={"margin-left": "20px","margin-right": "5px"}
-                    
+                    options=[],  # دینامیک از طریق callback تنظیم می‌شه
+                    value=[],
+                    labelStyle={'display': 'block', 'marginBottom': '4px'},
+                    inputStyle={"marginLeft": "10px", "marginRight": "5px"}
                 )
-            ])
-        ],
-            style={'width': '100%', 'padding': '5px 5px', 'display': 'inline-block'},
+            ]),
+            className="border border-secondary-subtle",
+            style={"backgroundColor": "#ffffff", "padding": "10px", "borderRadius": "6px"}
         ),
+        
+        # Graph section
+        dbc.Card(
+            dcc.Graph(id="data-preview-graph"),
+            body=True,
+            className="mt-2",
+            style={
+                "height": "500px",
+                "backgroundColor": "#ffffff",
+                "border": "1px solid #dee2e6",
+                "borderRadius": "6px",
+                "padding": "10px"
+            }
+        ),
+    ],
+    body=True,
+    color="#F9F9F9",
+    className="shadow-sm"
+)
+
+#-----------------------------------------------------------------------------
+cleaningSection = dbc.Card(
+    [
+        html.H4([
+            html.I(className="bi bi-graph-up-arrow me-2"),
+            "Preview Data"
+        ]),
+        html.Div(id='output-data-upload21'),
+        html.Br(),
+
+        dbc.Label("X variable", className="fw-bold"),
+        dcc.Dropdown(
+            id="x-variable",
+            options=[  # Placeholder options; dynamically filled later
+                {"label": col, "value": col} for col in pd.DataFrame()
+            ],
+            multi=False,
+            placeholder="Select X variable"
+        ),
+        html.Br(),
+
+        dbc.Label("Y variable", className="fw-bold"),
+        dcc.Dropdown(
+            id="y-variable",
+            options=[  # Placeholder options; dynamically filled later
+                {"label": col, "value": col} for col in pd.DataFrame()
+            ],
+            multi=True,
+            placeholder="Select one or more Y variables"
+        ),
+        html.Br(),
+
+        # Monthly and Y2 options
+        dbc.Row([
+            dbc.Col(
+                dcc.Checklist(
+                    id="ChecklistOptionsMonth",
+                    options=[{"label": "Monthly data", "value": "Month"}],
+                    value=["Month"],
+                    labelStyle={"display": "inline-block"},
+                    inputStyle={"marginLeft": "10px", "marginRight": "5px"},
+                    style={"marginBottom": "10px"}
+                ),
+                width="auto"
+            ),
+            dbc.Col(
+                dcc.Checklist(
+                    id="ChecklistOptionsY2",
+                    options=[{"label": "Double Y-Axis", "value": "y2"}],
+                    value=[],
+                    labelStyle={"display": "inline-block"},
+                    inputStyle={"marginLeft": "10px", "marginRight": "5px"},
+                ),
+                width="auto"
+            )
+        ], justify="start"),
+        html.Br(),
+
+        # Graph section
+        dbc.Card(
+            dcc.Graph(id="cluster-graph"),
+            body=True,
+            className="mt-2",
+            style={
+                "height": "500px",
+                "backgroundColor": "#ffffff",
+                "border": "1px solid #dee2e6",
+                "borderRadius": "6px",
+                "padding": "10px"
+            }
+        ),
+    ],
+    body=True,
+    color="#F9F9F9",
+    className="shadow-sm"
+)
+
+
+
+controls22 = dbc.Card(
+    [
+        html.H4([
+            html.I(className="bi bi-bar-chart-line-fill me-2"),
+            "Deterministic Analysis"
+        ]),
+        html.Div(id='output-data-upload22'),
+        html.Br(),
+
+        dbc.Checklist(
+            id="ChecklistOptionsSum",
+            options=[
+                {"label": "Show total", "value": "showTotal", "disabled": True}
+            ],
+            value=["showTotal"],
+            inline=True,
+            inputStyle={"marginLeft": "10px", "marginRight": "5px"},
+            style={"marginBottom": "10px"}
+        ),
+
+        dbc.Checklist(
+            id="ChecklistOptionsPeaks",
+            options=[
+                {"label": "Show peaks", "value": "showPeaks"}
+            ],
+            value=[],
+            inline=True,
+            inputStyle={"marginLeft": "10px", "marginRight": "5px"},
+            style={"marginBottom": "10px"}
+        ),
+
+        dbc.Checklist(
+            id="ChecklistOptionsDeclineCurve",
+            options=[
+                {"label": "Arps decline curve", "value": "showArpes"},
+                {"label": "Duong decline curve", "value": "showDuong"}
+            ],
+            value=[],
+            inline=False,
+            inputStyle={"marginLeft": "10px", "marginRight": "5px"},
+            style={"marginBottom": "15px"}
+        ),
+
+        html.H6("Number of months to predict:", className="fw-bold"),
+        dcc.Slider(
+            id="slider_numberofmonths",
+            min=1,
+            max=100,
+            step=1,
+            value=20,
+            marks={i: str(i) for i in [1, 20, 40, 60, 80, 100]},
+            tooltip={"placement": "bottom", "always_visible": True},
+        ),
+        html.Br(),
+
+        dbc.Card(
+            dcc.Graph(id="dca-graph"),
+            body=True,
+            className="mt-2",
+            style={
+                "height": "400px",
+                "backgroundColor": "#ffffff",
+                "border": "1px solid #dee2e6",
+                "borderRadius": "6px",
+                "padding": "10px"
+            }
+        ),
+
+        html.Br(),
+
+        dbc.Row([
+            dbc.Col([
+                html.H6("Selected Data"),
+                html.Pre(id='selected-data-printout', style=styles['pre']),
+            ], md=6),
+
+            dbc.Col([
+                html.H6("DCA Parameters"),
+                html.Pre(id='DCA-parameters-printout', style=styles['pre']),
+            ], md=6),
+        ]),
+
+        html.Div([
+            dcc.Markdown("""
+                **Tip**: Use the lasso or rectangle tool in the graph menu bar to select points.
+                If `layout.clickmode = 'event+select'`, holding `Shift` allows multi-selection.
+            """, className="text-muted")
+        ], className="mt-3")
+    ],
+    body=True,
+    color="#F9F9F9",
+    className="shadow-sm"
+)
+
+
+
+controls3 = dbc.Card(
+    [
+        html.H4([
+            html.I(className="bi bi-graph-up-arrow me-2"),
+            "Probabilistic Analysis"
+        ]),
+        html.H6("Economic limit production rate (qa):", className="fw-bold"),
+        dbc.Input(
+            type="number", id='inputqa', value=10000,
+            placeholder="Enter economic limit (qa)",
+            style={"marginBottom": "10px"}
+        ),
+
+        html.Div(id='textarea-Np-output', style={'whiteSpace': 'pre-line'}),
+
+        dbc.Row([
+            # Graph
+            dbc.Col(dcc.Graph(id="uncertainty-graph"), md=7),
+
+            # Distribution Inputs
+            dbc.Col([
+                html.H6("Probability Distribution", className="fw-bold"),
+                dcc.RadioItems(
+                    id='prob-dist-button',
+                    options=[
+                        {"label": "Triangular", "value": "Triangular"},
+                        {"label": "Normal", "value": "Normal"},
+                    ],
+                    value='Triangular',
+                    labelStyle={"display": "block", "marginBottom": "5px"},
+                    style={"marginBottom": "15px"}
+                ),
+
+                html.Div([
+                    html.H6("Triangular Parameters", className="fw-bold"),
+                    dbc.InputGroup([
+                        dbc.InputGroupText("Left %"),
+                        dbc.Input(
+                            id="Trinangular-left",
+                            placeholder="e.g. 20", value=20,
+                            min=0, max=100, type="number"
+                        )
+                    ], className="mb-2"),
+
+                    dbc.InputGroup([
+                        dbc.InputGroupText("Right %"),
+                        dbc.Input(
+                            id="Trinangular-right",
+                            placeholder="e.g. 20", value=20,
+                            min=0, max=100, type="number"
+                        )
+                    ], className="mb-3"),
+                ]),
+
+                html.Div([
+                    html.H6("Normal Parameters", className="fw-bold"),
+                    dbc.InputGroup([
+                        dbc.InputGroupText("STD % of mean"),
+                        dbc.Input(
+                            id="Normal-std",
+                            placeholder="e.g. 30", value=30,
+                            min=0, max=100, type="number"
+                        )
+                    ])
+                ])
+            ], md=5)
         ])
     ],
     body=True,
     color="#F9F9F9",
+    className="shadow-sm"
 )
-#-----------------------------------------------------------------------------
-controls11 = dbc.Card(
-    [
-    # Preview graph
-     html.H4("Preview data"),
-     #html.Hr(),     
-     html.Div(id='output-data-upload21'),
-                dbc.Label("X variable"),
-                dcc.Dropdown(
-                    id="x-variable",
-                    options=[
-                        {"label": col, "value": col} for col in pd.DataFrame()
-                    ],
-                    multi=False                    
-                ),
 
 
-                dbc.Label("Y variable"),
-                dcc.Dropdown(
-                    id="y-variable",
-                    options=[
-                        {"label": col, "value": col} for col in pd.DataFrame()
-                    ],
-                    multi=True                    
-                ),
 
-       
-        dcc.Checklist(
-            id="ChecklistOptionsMonth",
-            options=[
-                {"label": "Monthly data", "value": "Month"},
-            ],
-            value=["Month"],
-            labelStyle={"display": "inline-block"},
-            inputStyle={"margin-left": "20px","margin-right": "5px"}
-        ),
-    
-        dcc.Checklist(
-            id="ChecklistOptionsY2",
-            options=[
-                {"label": "Double Y-Axis", "value": "y2"},
-            ],
-            value=[],
-            labelStyle={"display": "inline-block"},
-            inputStyle={"margin-left": "20px","margin-right": "5px"}
-        ),  
-        html.Div([
-        dbc.Row(dcc.Graph(id="cluster-graph")),
-        ],  style={"height": "200","width": "80vh"}),
-    ],
-    body=True,
-    color="#F9F9F9",
-)
-#-----------------------------------------------------------------------------
-controls22 = dbc.Card(
-    [
-    html.Div(id='output-data-upload22'),
-
-    html.H2("Deterministic Analysis"),
-    dcc.Checklist(
-        id="ChecklistOptionsSum",
-        options=[
-            {"label": "Show total", "value": "showTotal","disabled":"True"},
-        ],
-        value=["showTotal"],
-        labelStyle={"display": "inline-block"},
-        inputStyle={"margin-left": "20px","margin-right": "5px"}
-    ),   
-    dcc.Checklist(
-        id="ChecklistOptionsPeaks",
-        options=[
-            {"label": "Show peaks", "value": "showPeaks"}
-        ],
-        value=[],
-        labelStyle={"display": "inline-block"},
-        inputStyle={"margin-left": "20px","margin-right": "5px"}
-    ),  
-
-
-        dcc.Checklist(
-            id="ChecklistOptionsDeclineCurve",
-            options=[
-                {"label": "Arpes decline curve", "value": "showArpes"},
-                {"label": "Duong decline curve", "value": "showDuong"}
-            ],
-            value=[],
-            labelStyle={"display": "inline-block"},
-            inputStyle={"margin-left": "20px","margin-right": "5px"}
-        ),  
-
-        html.Div(id='slider-output-container'),
-        html.H5("Number of months to predict:"),
-        dcc.Slider(
-        id="slider_numberofmonths",
-        min=1,
-        max=100,
-        marks={
-            1: '1',
-            20: '20',
-            40: '40',
-            60: '60',
-            80: '80',
-            100: '100'
-        },        
-        tooltip={"placement": "bottom", "always_visible": True},
-        step=1,
-        value=20),
-        html.Div([
-        dbc.Row(dcc.Graph(id="dca-graph")),
-        ],            style={"height": "200","width": "80vh"}),
-        html.Div([
-            dcc.Markdown("""
-                **Selection Data**
-
-                Choose the lasso or rectangle tool in the graph's menu
-                bar and then select points in the graph.
-
-                Note that if `layout.clickmode = 'event+select'`, selection data also
-                accumulates (or un-accumulates) selected data if you hold down the shift
-                button while clicking.
-            """),
-            dbc.Row([
-            dbc.Col(
-                html.Pre(id='selected-data-printout', style=styles['pre']),md=2),
-            dbc.Col(
-                html.Pre(id='DCA-parameters-printout', style=styles['pre']),md=2),
-            ])
-        ], className='three columns'),
-    ],
-    body=True,
-    color="#F9F9F9",
-)
-controls3 = dbc.Card(
-    [
-        html.H2("Probabilistic Analysis"),
-        html.H5("Economic limit production rate qa:"),
-        dbc.Input(type="float", id='inputqa',value=10000),        
-        html.Div(id='textarea-Np-output', style={'whiteSpace': 'pre-line'}),
-        dbc.Row([
-            dbc.Col(dcc.Graph(id="uncertainty-graph"),md=6),
-            dbc.Col([
-                dbc.Row([
-                    dcc.RadioItems(id = 'prob-dist-button',
-                                   options = [dict(label = '  Triangular', value = 'Triangular'),
-                                              dict(label = '  Normal', value = 'Normal'),
-                                              ],
-                                   value = 'Triangular',  labelStyle={'display': 'block'})
-                    ]),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.InputGroup([
-                            dbc.InputGroupText("Tiangular left:"),                        
-                            dbc.InputGroupText("%"),                        
-                            # dbc.InputGroupAddon(
-                            #     id='Triangular-left',
-                            #     style={"margin-left":"8px"}),
-                            dbc.Input(
-                                id="Trinangular-left",
-                                placeholder = '%', value=20,min=0, max=100                           
-                                )])])
-                    ,dbc.Col([
-                        dbc.InputGroup([
-                            dbc.InputGroupText("Tiangular right:"),                        
-                            dbc.InputGroupText("%"),                        
-                            dbc.Input(id="Trinangular-right", placeholder = '%',value=20,min=0, max=100)])
-                    ])
-                    ]),
-                dbc.Row([
-                    dbc.Col([
-                        dbc.InputGroup([
-                            dbc.InputGroupText("Normal STD %mean:"),                        
-                            dbc.InputGroupText("%"),                        
-                            dbc.Input(
-                                id="Normal-std",
-                                placeholder = '%',value=30, min=0, max=100                           
-                                )])])
-                    ])
-                
-                ],md=2)
-            ])
-    ],
-    body=True,
-    color="#F9F9F9",
-
-)
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
 #---------------------LAYOUT---------------------------------------------------
 #------------------------------------------------------------------------------
 app.layout = html.Div(
     [
-    dbc.Container(
-        [
-            html.H1("PES Tool for Decline Curve Analysis"),
-            html.Hr(),
-            dcc.Store(id='dataframevalue'),
-            dcc.Store(id='dataframepeaksvalue'),
-            dcc.Store(id='dataframepeaksvalueUseForDCA'),
-            dbc.Row(
-                [
-                    dbc.Col(controls1, md=6),
-                    dbc.Col(controls11, md=6),
-                ]),
-            
-            html.Div(id='div1'),
-            dbc.Card(
-                [
-            
-                dbc.Row(
+        dbc.Container(
+            [
+                dbc.Card(
                     [
-                        dbc.Col(controls22, md=6),
-                        dbc.Col(controls3, md=6),
-                    ]),
-                ]
-            ),
-            html.Div(id='div2'),
-            dbc.Row(
-                [
-                    dbc.Col(
-                          dash_table.DataTable(id='DataTable',
-                                              export_format="csv",
-                                              style_data={ 'border': '1px solid black' },
-                                              style_header={ 'border': '1px solid black','whiteSpace':'normal' },
-                                              style_cell={'fontSize':16, 'font-family':'sans-serif'},
-                                              )),
-                ]),
+                        dbc.CardHeader(html.H1("PES Tool for Decline Curve Analysis", className="text-center mb-0")),
+                        dbc.CardBody(
+                            [
+                                html.Hr(),
+                                dcc.Store(id='dataframevalue'),
+                                dcc.Store(id='dataframepeaksvalue'),
+                                dcc.Store(id='dataframepeaksvalueUseForDCA'),
+
+                                dbc.Row(
+                                    [
+                                        dbc.Col(uploadSection, md=12),
+                                    ],
+                                    className="mb-4"
+                                ),
+
+                                html.Div(id='div1', className="mb-4"),
+
+                                dbc.Row(
+                                    [
+                                        dbc.Col(cleaningSection, md=12),
+                                    ],
+                                    className="mb-4"
+                                ),
+
+                                html.Div(id='div1', className="mb-4"),
+
+                                dbc.Card(
+                                    [
+                                        dbc.CardHeader("Peak Detection & Forecasting"),
+                                        dbc.CardBody(
+                                            dbc.Row(
+                                                [
+                                                    dbc.Col(controls22, md=6),
+                                                    dbc.Col(controls3, md=6),
+                                                ]
+                                            )
+                                        ),
+                                    ],
+                                    className="mb-4"
+                                ),
+
+                                html.Div(id='div2', className="mb-4"),
+
+                                dbc.Row(
+                                    [
+                                        dbc.Col(
+                                            dash_table.DataTable(
+                                                id='DataTable',
+                                                export_format="csv",
+                                                style_data={'border': '1px solid #dee2e6', 'padding': '8px'},
+                                                style_header={
+                                                    'backgroundColor': '#f8f9fa',
+                                                    'fontWeight': 'bold',
+                                                    'border': '1px solid #dee2e6',
+                                                    'whiteSpace': 'normal'
+                                                },
+                                                style_cell={
+                                                    'fontSize': 16,
+                                                    'font-family': 'sans-serif',
+                                                    'textAlign': 'center'
+                                                },
+                                                style_table={
+                                                    'overflowX': 'auto',
+                                                    'border': '1px solid #dee2e6',
+                                                    'marginTop': '10px'
+                                                }
+                                            ),
+                                            width=12
+                                        )
+                                    ]
+                                ),
+                            ]
+                        ),
+                    ],
+                    className="shadow-sm mb-4",
+                    style={"backgroundColor": "white", "borderRadius": "0.75rem"}
+                )
             ],
-                fluid=True,
-        ),
+            fluid=True,
+            style={"padding": "2rem", "backgroundColor": "#f4f6f9"}
+        )
     ],
     id="mainContainer",
-    style={"display": "flex", "flex-direction": "column",     "paper_bgcolor":"#F9F9F9"},
+    style={"display": "flex", "flexDirection": "column", "minHeight": "100vh"}
 )
 
-#------------------------------------------------------------------------------
-#------------------------------------------------------------------------------
-#------------------------------------------------------------------------------
-#------------------------------------------------------------------------------
+
 
 @app.callback(
     Output("DataTable", "css"), Input("DataTable", "derived_virtual_data"),
@@ -332,10 +453,10 @@ def style_export_button(data):
     else:
         return [{"selector": ".export", "rule": "display:block"}]
 
-
 #------------------------------------------------------------------------------
 # Updating columns check list
-@app.callback([Output(component_id='checklistfiles', component_property='options'),
+@app.callback([
+    Output(component_id='checklistfiles', component_property='options'),
                Output('dataframevalue', 'data'),
                Output('dataframepeaksvalue', 'data'),
                 ],
@@ -361,18 +482,48 @@ def update_output(icontents, ifilename, date):
             dffPeaks = pd.concat([dffPeaks, dfPeaks1], axis=1)
         
         dffPeaks['ShowOnGraph'] = False    
-        dff.drop("index", axis=1, inplace=True)
-        dffPeaks.drop("index", axis=1, inplace=True)   
+
+        if "index" in dff.columns:
+            dff.drop("index", axis=1, inplace=True)
+        if "index" in dffPeaks.columns:
+            dffPeaks.drop("index", axis=1, inplace=True) 
+
         dff=dff.reset_index()
         dffPeaks=dffPeaks.reset_index()
         dffPeaksUseForDCA=pd.concat([dffPeaks[dateCol], dffPeaks['ShowOnGraph']], axis=1)
 
-
-    checklist_options = [{"label": item.title(), "value": item} for item in dff.columns.to_list()]
+    checklist_options = [{"label": f"{col}", "value": col} for col in dff.columns.to_list()]
+    # checklist_options = [{"label": f"{filename} : {col}", "value": col} for col in df1.columns.to_list()]
 
     return [checklist_options,
             dff.to_json(date_format='iso', orient='split'),
             dffPeaks.to_json(date_format='iso', orient='split')]
+
+@app.callback(
+    Output("data-preview-graph", "figure"),
+    Input("checklistfiles", "value"),
+    State("dataframevalue", "data"),
+)
+def update_graph(selected_columns, jsonified_df):
+    if not selected_columns or not jsonified_df:
+        return go.Figure()
+
+    df = pd.read_json(jsonified_df, orient='split')
+
+    fig = go.Figure()
+
+    for col in selected_columns:
+        if col in df.columns:
+            fig.add_trace(go.Scatter(x=df["Date"], y=df[col], mode='lines+markers', name=col))
+
+    fig.update_layout(
+        title="Selected Data Columns",
+        xaxis_title="Date",
+        yaxis_title="Values",
+        template="plotly_white"
+    )
+
+    return fig
 #------------------------------------------------------------------------------
 
 # updating the dropdown of x and y for graph by browsed files
