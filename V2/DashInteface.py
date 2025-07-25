@@ -16,7 +16,8 @@ import json
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from modular.DCA04 import *
+
+from V2.DCA04 import *
 
 
 external_stylesheets = [
@@ -93,6 +94,29 @@ uploadSection = dbc.Card(
                 "padding": "10px"
             }
         ),
+
+        # Toggle and range for peaks display
+        dbc.Row([
+            dbc.Col([
+                dbc.Checkbox(
+                    id="show-peaks-toggle",
+                    checked=True,
+                    # className="mb-2",
+                ),
+                html.Label("show peaks", htmlFor="show-peaks-toggle", style={"marginLeft": "8px"}),
+            ])
+        ], className="mb-3"),
+
+        html.Div([
+        html.Label("Select Peaks Date Range", className="fw-bold"),
+        dcc.DatePickerRange(
+            id='peaks-date-range',
+            display_format='YYYY-MM-DD',
+            start_date_placeholder_text="Start Date",
+            end_date_placeholder_text="End Date",
+            style={"marginBottom": "10px"}
+        )
+        ], style={"marginTop": "10px"})
     ],
     body=True,
     color="#F9F9F9",
@@ -460,70 +484,186 @@ def style_export_button(data):
 # Updating columns check list
 @app.callback([
     Output(component_id='checklistfiles', component_property='options'),
-               Output('dataframevalue', 'data'),
-               Output('dataframepeaksvalue', 'data'),
-                ],
-              [Input(component_id='upload-data', component_property='contents'),
-               State(component_id='upload-data', component_property='filename'),
-               State(component_id='upload-data', component_property='last_modified')],
-              prevent_initial_call=True)
+    Output('dataframevalue', 'data'),
+    Output('dataframepeaksvalue', 'data'),
+    ],
+    [Input(component_id='upload-data', component_property='contents'),
+    State(component_id='upload-data', component_property='filename'),
+    State(component_id='upload-data', component_property='last_modified')],
+    prevent_initial_call=True)
 def update_output(icontents, ifilename, date):
-    dff = pd.DataFrame(columns=["Date"])
-    dffPeaks = pd.DataFrame(columns=["Date"])
-    dff = dff.set_index("Date")
-    dffPeaks = dffPeaks.set_index("Date")   
+    # ساخت دیتافریم خالی با ایندکس Date
+    dff = pd.DataFrame(columns=["Date"]).set_index("Date")
+    dffPeaks = pd.DataFrame(columns=["Date"]).set_index("Date")   
+
     if icontents:
-        for i,contents in enumerate(icontents):
-            contents = icontents[i]
+        for i, contents in enumerate(icontents):
             filename = ifilename[i]
 
-            df1,dfPeaks1,dateCol = parse_data(contents, filename,[''])
+            # خواندن داده‌ها و پاکسازی با parse_data
+            df1, dfPeaks1, dateCol = parse_data(contents, filename, [''])
+            
+            # تنظیم ایندکس به ستون تاریخ
             df1 = df1.set_index(dateCol)
             dfPeaks1 = dfPeaks1.set_index(dateCol)
     
+            # ادغام داده‌ها از چند فایل کنار هم
             dff = pd.concat([dff, df1], axis=1)
             dffPeaks = pd.concat([dffPeaks, dfPeaks1], axis=1)
         
+        # اضافه کردن ستون نشانگر نمایش در گراف
         dffPeaks['ShowOnGraph'] = False    
 
+        # حذف ستون‌های اضافه مثل index اگر وجود داشته باشه
         if "index" in dff.columns:
             dff.drop("index", axis=1, inplace=True)
         if "index" in dffPeaks.columns:
             dffPeaks.drop("index", axis=1, inplace=True) 
 
-        dff=dff.reset_index()
-        dffPeaks=dffPeaks.reset_index()
-        dffPeaksUseForDCA=pd.concat([dffPeaks[dateCol], dffPeaks['ShowOnGraph']], axis=1)
+        # ریست ایندکس برای ارسال json
+        dff = dff.reset_index()
+        dffPeaks = dffPeaks.reset_index()
 
+    # آماده‌سازی گزینه‌ها برای چک‌لیست
     checklist_options = [{"label": f"{col}", "value": col} for col in dff.columns.to_list()]
-    # checklist_options = [{"label": f"{filename} : {col}", "value": col} for col in df1.columns.to_list()]
 
-    return [checklist_options,
-            dff.to_json(date_format='iso', orient='split'),
-            dffPeaks.to_json(date_format='iso', orient='split')]
+    # بازگرداندن گزینه‌ها و داده‌ها
+    return [
+        checklist_options,
+        dff.to_json(date_format='iso', orient='split'),
+        dffPeaks.to_json(date_format='iso', orient='split')
+    ]
+
+# @app.callback(
+#     Output("data-preview-graph", "figure"),
+#     Input("checklistfiles", "value"),
+#     State("dataframevalue", "data"),
+# )
+# def update_graph(selected_columns, jsonified_df):
+#     if not selected_columns or not jsonified_df:
+#         return go.Figure()
+
+#     df = pd.read_json(jsonified_df, orient='split')
+
+#     fig = go.Figure()
+
+#     for col in selected_columns:
+#         if col in df.columns:
+#             fig.add_trace(go.Scatter(x=df["Date"], y=df[col], mode='lines+markers', name=col))
+
+#     fig.update_layout(
+#         title="Selected Data Columns",
+#         xaxis_title="Date",
+#         yaxis_title="Values",
+#         template="plotly_white"
+#     )
+
+#     return fig
 
 @app.callback(
     Output("data-preview-graph", "figure"),
-    Input("checklistfiles", "value"),
-    State("dataframevalue", "data"),
+    [
+        Input("checklistfiles", "value"),
+        Input("dataframevalue", "data"),
+        Input("dataframepeaksvalue", "data"),
+        Input("show-peaks-toggle", "checked"),
+        Input("peaks-date-range", "start_date"),
+        Input("peaks-date-range", "end_date")
+    ],
+    prevent_initial_call=True
 )
-def update_graph(selected_columns, jsonified_df):
-    if not selected_columns or not jsonified_df:
-        return go.Figure()
+def update_graph(selected_columns, df_json, peaks_json, show_peaks, start_date, end_date):
+    if not selected_columns or not df_json or not peaks_json:
+        fig = go.Figure()
+        fig.update_layout(
+            title="No data to display",
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            annotations=[dict(
+                text="Please upload data and select columns to display the graph.",
+                xref="paper", yref="paper",
+                showarrow=False,
+                font=dict(size=16)
+            )],
+            template="plotly_white"
+        )
+        return fig
 
-    df = pd.read_json(jsonified_df, orient='split')
+    df = pd.read_json(df_json, orient="split")
+    df_peaks = pd.read_json(peaks_json, orient="split")
+
+    # اگر تاریخ شروع یا پایان مشخص شده، فیلتر کن
+    if start_date:
+        df_peaks = df_peaks[df_peaks['Date'] >= start_date]
+    if end_date:
+        df_peaks = df_peaks[df_peaks['Date'] <= end_date]
 
     fig = go.Figure()
 
     for col in selected_columns:
-        if col in df.columns:
-            fig.add_trace(go.Scatter(x=df["Date"], y=df[col], mode='lines+markers', name=col))
+        if col not in df.columns:
+            continue
+
+        fig.add_trace(go.Scatter(
+            x=df["Date"],
+            y=df[col],
+            mode='lines+markers',
+            name=col,
+            line=dict(width=2),
+            marker=dict(size=6),
+            hovertemplate='%{x|%Y-%m-%d %H:%M:%S}<br>%{y}<extra>' + col + '</extra>'
+        ))
+
+        if show_peaks and col in df_peaks.columns:
+            fig.add_trace(go.Scatter(
+                x=df_peaks['Date'],
+                y=df_peaks[col],
+                mode='markers',
+                name=f"Peaks - {col}",
+                marker=dict(color='red', size=8, symbol='circle'),
+                showlegend=True
+            ))
 
     fig.update_layout(
-        title="Selected Data Columns",
-        xaxis_title="Date",
-        yaxis_title="Values",
-        template="plotly_white"
+        title=dict(
+            text="Selected Data Columns",
+            x=0.5,
+            xanchor='center',
+            font=dict(size=20)
+        ),
+        xaxis=dict(
+            title="Date",
+            showgrid=True,
+            zeroline=False,
+            showline=True,
+            linewidth=1,
+            linecolor='black',
+            mirror=True,
+            tickformat='%Y-%m-%d',
+            rangeslider=dict(visible=True),
+            type='date'
+        ),
+        yaxis=dict(
+            title="Values",
+            showgrid=True,
+            zeroline=False,
+            showline=True,
+            linewidth=1,
+            linecolor='black',
+            mirror=True,
+        ),
+        legend=dict(
+            title="Columns",
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        template="plotly_white",
+        hovermode='x unified',
+        margin=dict(l=50, r=50, t=80, b=50),
+        dragmode='zoom'
     )
 
     return fig

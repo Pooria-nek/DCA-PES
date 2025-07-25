@@ -250,50 +250,44 @@ def findPeaks0(df, fieldName, factor):
 # filez=['BarnettShaleJohnson.csv','WagnerRecordedData2018-2020.csv','WagnerUnitTotal.csv','BarnettShaleDenton.csv',
 #        'BarnetteShaleTarrant.csv','BarnettShaleJohnson.csv','HuntsvilleShale.csv']
 
-# def findPeaks(df, fieldName, factor):
-#     if df[fieldName].isnull().all():
-#         return []
-#     M=df[fieldName]
-#     M=pd.concat([pd.Series([0]), M])    
-#     M=M.to_numpy()    
-#     ### IMPORTANT ### order should be define by user
-#     indices = argrelextrema(M, np.greater, order=6)  # np.greater for maxima
-#     indices=np.asarray(indices)-1
-#     indices=indices.flatten()
+def findPeaks(df, fieldName, factor):
+    if df[fieldName].isnull().all():
+        return []
+    M=df[fieldName]
+    M=pd.concat([pd.Series([0]), M])    
+    M=M.to_numpy()    
+    ### IMPORTANT ### order should be define by user
+    indices = argrelextrema(M, np.greater, order=6)  # np.greater for maxima
+    indices=np.asarray(indices)-1
+    indices=indices.flatten()
 
-#     return indices
+    return indices
 
-def findPeaks(df: pd.DataFrame, fieldName: str, order: int = 6) -> np.ndarray:
-    """
-    شناسایی نقاط اوج (local maxima) در یک ستون عددی از دیتافریم.
+# def findPeaks(df: pd.DataFrame, fieldName: str, order: int = 6) -> np.ndarray:
+#     """
+#     شناسایی نقاط اوج (local maxima) در یک ستون عددی از دیتافریم.
 
-    Args:
-        df (pd.DataFrame): دیتافریم ورودی.
-        fieldName (str): نام ستونی که باید در آن قله‌ها شناسایی شوند.
-        order (int): فاصله‌ی مورد نیاز برای مقایسه نقاط جهت یافتن قله‌ها.
+#     Args:
+#         df (pd.DataFrame): دیتافریم ورودی.
+#         fieldName (str): نام ستونی که باید در آن قله‌ها شناسایی شوند.
+#         order (int): تعداد نقاط اطراف که برای تشخیص قله در نظر گرفته می‌شوند.
 
-    Returns:
-        np.ndarray: آرایه‌ای از ایندکس‌هایی که قله‌ها را نشان می‌دهند.
-    """
-    if df.empty or fieldName not in df.columns:
-        return np.array([])
+#     Returns:
+#         np.ndarray: آرایه‌ای از ایندکس‌هایی که قله‌ها را نشان می‌دهند.
+#     """
+#     if df.empty or fieldName not in df.columns:
+#         return np.array([])
 
-    series = df[fieldName].dropna()
+#     # حذف مقادیر NaN و غیرعددی
+#     series = pd.to_numeric(df[fieldName], errors="coerce").dropna()
 
-    if series.empty:
-        return np.array([])
+#     if series.empty:
+#         return np.array([])
 
-    # افزودن مقدار صفر ابتدای سری جهت جلوگیری از جا افتادن قله اول
-    extended_series = pd.concat([pd.Series([0]), series]).to_numpy()
+#     # استفاده مستقیم از سری به جای افزودن مقدار صفر
+#     peaks_indices = argrelextrema(series.values, np.greater, order=order)[0]
 
-    # شناسایی ایندکس قله‌ها با استفاده از argrelextrema
-    peaks_indices = argrelextrema(extended_series, np.greater, order=order)[0]
-
-    # جبران افست یک‌خانه‌ای بخاطر Series([0]) ابتدای داده
-    adjusted_indices = peaks_indices - 1
-
-    # حذف اندیس‌های منفی (ممکن است پیش بیاید)
-    return adjusted_indices[adjusted_indices >= 0]
+#     return peaks_indices
 
 def Duong(t, q1,q_inf=0, a=0.1, m=0.1):
     global t0
