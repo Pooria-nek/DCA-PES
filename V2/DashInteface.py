@@ -203,6 +203,18 @@ uploadSection = dbc.Card(
 declineCurveAnalysis = dbc.Card(
     dbc.CardBody([
 
+        dcc.RadioItems(
+            id="dca-model-selector",
+            options=[
+                {"label": "Hyperbolic", "value": "hyperbolic"},
+                {"label": "Exponential", "value": "exponential"},
+                {"label": "Harmonic", "value": "harmonic"},
+            ],
+            value="hyperbolic",
+            labelStyle={"display": "inline-block", "marginRight": "15px"},
+            inline=True
+        ),
+
         dcc.Dropdown(id="dca-column-dropdown", placeholder="Select rate column..."),
         html.Br(),
         html.Button("Run Hyperbolic DCA", id="run-dca-btn", n_clicks=0, className="btn btn-primary"),
@@ -1214,70 +1226,85 @@ def computeDuong(df,dfPeaks,xvalue,yy,qa,numberOfMonths,triangularLeft,triangula
 def sync_dropdown_with_checklist(checklist_options):
     return checklist_options
 
-# مدل hyperbolic
 def hyperbolic_decline(t, qi, Di, b):
-    return qi / (1 + b * Di * t) ** (1 / b)
+    return qi / np.power(1 + b * Di * t, 1 / b)
+
+def exponential_decline(t, qi, Di):
+    return qi * np.exp(-Di * t)
+
+def harmonic_decline(t, qi, Di):
+    return qi / (1 + Di * t)
 
 @app.callback(
     [Output("dca-graph", "figure"),
      Output("dca-results", "children")],
     Input("run-dca-btn", "n_clicks"),
     State("dca-column-dropdown", "value"),
+    State("dca-model-selector", "value"),
     State("dataframevalue", "data"),
     prevent_initial_call=True
 )
-def run_hyperbolic_dca(n_clicks, column, df_json):
+def run_dca_model(n_clicks, column, model, df_json):
     if not column or not df_json:
         raise dash.exceptions.PreventUpdate
 
+    import io
+    df = pd.read_json(io.StringIO(df_json), orient='split')
+    df = df.dropna(subset=[column])
+    df = df.sort_values("Date")
+
+    t = (df["Date"] - df["Date"].iloc[0]).dt.days.values
+    q = df[column].values
+
     try:
-        df = pd.read_json(io.StringIO(df_json), orient='split')
-
-        if column not in df.columns:
-            return go.Figure(), html.Div(f"❌ ستون «{column}» در داده‌ها موجود نیست.")
-
-        if not pd.api.types.is_datetime64_any_dtype(df["Date"]):
-            df["Date"] = pd.to_datetime(df["Date"], errors='coerce')
-
-        df = df.dropna(subset=["Date", column])
-        df = df.sort_values("Date")
-
-        t = (df["Date"] - df["Date"].iloc[0]).dt.days.values
-        q = df[column].values
-
-        if q[0] <= 0:
-            return go.Figure(), html.Div("❌ مقدار اولیه نرخ تولید (qi) صفر یا منفی است.")
-
-        initial_guess = [q[0], 0.01, 0.5]
-        params, _ = curve_fit(hyperbolic_decline, t, q, p0=initial_guess, maxfev=10000)
-        qi, Di, b = params
-
-        q_fit = hyperbolic_decline(t, qi, Di, b)
-
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual Data"))
-        fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name="Hyperbolic Fit"))
+
+        if model == "hyperbolic":
+            params, _ = curve_fit(hyperbolic_decline, t, q, p0=[q[0], 0.01, 0.5], maxfev=10000)
+            qi, Di, b = params
+            q_fit = hyperbolic_decline(t, qi, Di, b)
+            fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name="Hyperbolic Fit"))
+            result = f"""
+            📉 **Hyperbolic Decline:**  
+            🔹 qi = {qi:.2f}  
+            🔹 Di = {Di:.4f}  
+            🔹 b = {b:.2f}
+            """
+
+        elif model == "exponential":
+            params, _ = curve_fit(exponential_decline, t, q, p0=[q[0], 0.01])
+            qi, Di = params
+            q_fit = exponential_decline(t, qi, Di)
+            fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name="Exponential Fit"))
+            result = f"""
+            📉 **Exponential Decline:**  
+            🔹 qi = {qi:.2f}  
+            🔹 Di = {Di:.4f}
+            """
+
+        elif model == "harmonic":
+            params, _ = curve_fit(harmonic_decline, t, q, p0=[q[0], 0.01])
+            qi, Di = params
+            q_fit = harmonic_decline(t, qi, Di)
+            fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name="Harmonic Fit"))
+            result = f"""
+            📉 **Harmonic Decline:**  
+            🔹 qi = {qi:.2f}  
+            🔹 Di = {Di:.4f}
+            """
 
         fig.update_layout(
-            title=f"Hyperbolic DCA Fit - {column}",
+            title=f"{model.capitalize()} Decline Curve Fit - {column}",
             xaxis_title="Date",
             yaxis_title="Rate",
             template="plotly_white"
         )
 
-        result_text = f"""
-        📈 <b>Hyperbolic Decline Parameters:</b><br>
-        🔹 qi = {qi:.2f}<br>
-        🔹 Di = {Di:.4f} per day<br>
-        🔹 b = {b:.2f}
-        """
-
-        return fig, html.Div([dcc.Markdown(result_text, dangerously_allow_html=True)])
+        return fig, dcc.Markdown(result)
 
     except Exception as e:
-        print("❌ Exception in DCA:", str(e))
         return go.Figure(), html.Div(f"❌ Error fitting DCA: {e}")
-    
 
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
