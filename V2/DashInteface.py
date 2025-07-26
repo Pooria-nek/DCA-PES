@@ -212,38 +212,7 @@ declineCurveAnalysis = dbc.Card(
 
         html.Div(id="dca-results"),
 
-        # ذخیره داده‌ها به صورت json
         dcc.Store(id="dataframevalue")
-        # html.H5("Decline Curve Analysis", className="mb-2"),
-        
-        # # انتخاب ستون برای DCA
-        # dcc.Dropdown(id="dca-column-dropdown", placeholder="Select column for DCA"),
-
-        # html.Br(),
-
-        # # انتخاب بازه زمانی
-        # dcc.DatePickerRange(
-        #     id='dca-date-range',
-        #     start_date_placeholder_text="Start Date",
-        #     end_date_placeholder_text="End Date",
-        # ),
-
-        # html.Br(), html.Br(),
-
-        # # دکمه اجرا
-        # dbc.Button("Calculate DCA", id="run-dca-button", color="primary", className="mt-2"),
-
-        # # html.Div([
-        # #     html.H5("Decline Curve Analysis"),
-        # #     dcc.Dropdown(id="dca-column-dropdown", placeholder="Select a column for DCA"),
-        # #     html.Br(),
-        # #     html.Button("Run Hyperbolic DCA", id="run-dca-btn", className="btn btn-primary"),
-        # #     html.Br(), html.Br(),
-        # #     dcc.Graph(id="dca-graph"),
-        # #     html.Div(id="dca-results", style={"marginTop": "20px"})
-        # # ]),
-
-        # # html.Div(id="dca-output", className="mt-3 text-success")
     ]),
     className="mt-3 border border-primary-subtle",
     style={"backgroundColor": "#ffffff", "padding": "10px", "borderRadius": "6px"}
