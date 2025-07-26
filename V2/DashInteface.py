@@ -123,83 +123,131 @@ uploadSection = dbc.Card(
     className="shadow-sm"
 )
 
-#-----------------------------------------------------------------------------
-cleaningSection = dbc.Card(
-    [
-        html.H4([
-            html.I(className="bi bi-graph-up-arrow me-2"),
-            "Preview Data"
-        ]),
-        html.Div(id='output-data-upload21'),
-        html.Br(),
+# #-----------------------------------------------------------------------------
+# cleaningSection = dbc.Card(
+#     [
+#         html.H4([
+#             html.I(className="bi bi-graph-up-arrow me-2"),
+#             "Preview Data"
+#         ]),
+#         html.Div(id='output-data-upload21'),
+#         html.Br(),
 
-        dbc.Label("X variable", className="fw-bold"),
-        dcc.Dropdown(
-            id="x-variable",
-            options=[  # Placeholder options; dynamically filled later
-                {"label": col, "value": col} for col in pd.DataFrame()
-            ],
-            multi=False,
-            placeholder="Select X variable"
-        ),
-        html.Br(),
+#         dbc.Label("X variable", className="fw-bold"),
+#         dcc.Dropdown(
+#             id="x-variable",
+#             options=[  # Placeholder options; dynamically filled later
+#                 {"label": col, "value": col} for col in pd.DataFrame()
+#             ],
+#             multi=False,
+#             placeholder="Select X variable"
+#         ),
+#         html.Br(),
 
-        dbc.Label("Y variable", className="fw-bold"),
-        dcc.Dropdown(
-            id="y-variable",
-            options=[  # Placeholder options; dynamically filled later
-                {"label": col, "value": col} for col in pd.DataFrame()
-            ],
-            multi=True,
-            placeholder="Select one or more Y variables"
-        ),
-        html.Br(),
+#         dbc.Label("Y variable", className="fw-bold"),
+#         dcc.Dropdown(
+#             id="y-variable",
+#             options=[  # Placeholder options; dynamically filled later
+#                 {"label": col, "value": col} for col in pd.DataFrame()
+#             ],
+#             multi=True,
+#             placeholder="Select one or more Y variables"
+#         ),
+#         html.Br(),
 
-        # Monthly and Y2 options
-        dbc.Row([
-            dbc.Col(
-                dcc.Checklist(
-                    id="ChecklistOptionsMonth",
-                    options=[{"label": "Monthly data", "value": "Month"}],
-                    value=["Month"],
-                    labelStyle={"display": "inline-block"},
-                    inputStyle={"marginLeft": "10px", "marginRight": "5px"},
-                    style={"marginBottom": "10px"}
-                ),
-                width="auto"
-            ),
-            dbc.Col(
-                dcc.Checklist(
-                    id="ChecklistOptionsY2",
-                    options=[{"label": "Double Y-Axis", "value": "y2"}],
-                    value=[],
-                    labelStyle={"display": "inline-block"},
-                    inputStyle={"marginLeft": "10px", "marginRight": "5px"},
-                ),
-                width="auto"
-            )
-        ], justify="start"),
-        html.Br(),
+#         # Monthly and Y2 options
+#         dbc.Row([
+#             dbc.Col(
+#                 dcc.Checklist(
+#                     id="ChecklistOptionsMonth",
+#                     options=[{"label": "Monthly data", "value": "Month"}],
+#                     value=["Month"],
+#                     labelStyle={"display": "inline-block"},
+#                     inputStyle={"marginLeft": "10px", "marginRight": "5px"},
+#                     style={"marginBottom": "10px"}
+#                 ),
+#                 width="auto"
+#             ),
+#             dbc.Col(
+#                 dcc.Checklist(
+#                     id="ChecklistOptionsY2",
+#                     options=[{"label": "Double Y-Axis", "value": "y2"}],
+#                     value=[],
+#                     labelStyle={"display": "inline-block"},
+#                     inputStyle={"marginLeft": "10px", "marginRight": "5px"},
+#                 ),
+#                 width="auto"
+#             )
+#         ], justify="start"),
+#         html.Br(),
 
-        # Graph section
-        dbc.Card(
-            dcc.Graph(id="cluster-graph"),
-            body=True,
-            className="mt-2",
-            style={
-                "height": "500px",
-                "backgroundColor": "#ffffff",
-                "border": "1px solid #dee2e6",
-                "borderRadius": "6px",
-                "padding": "10px"
-            }
-        ),
-    ],
-    body=True,
-    color="#F9F9F9",
-    className="shadow-sm"
+#         # Graph section
+#         dbc.Card(
+#             dcc.Graph(id="cluster-graph"),
+#             body=True,
+#             className="mt-2",
+#             style={
+#                 "height": "500px",
+#                 "backgroundColor": "#ffffff",
+#                 "border": "1px solid #dee2e6",
+#                 "borderRadius": "6px",
+#                 "padding": "10px"
+#             }
+#         ),
+#     ],
+#     body=True,
+#     color="#F9F9F9",
+#     className="shadow-sm"
+# )
+
+declineCurveAnalysis = dbc.Card(
+    dbc.CardBody([
+
+        dcc.Dropdown(id="dca-column-dropdown", placeholder="Select rate column..."),
+        html.Br(),
+        html.Button("Run Hyperbolic DCA", id="run-dca-btn", n_clicks=0, className="btn btn-primary"),
+        html.Br(), html.Br(),
+
+        dcc.Graph(id="dca-graph"),
+
+        html.Div(id="dca-results"),
+
+        # ذخیره داده‌ها به صورت json
+        dcc.Store(id="dataframevalue")
+        # html.H5("Decline Curve Analysis", className="mb-2"),
+        
+        # # انتخاب ستون برای DCA
+        # dcc.Dropdown(id="dca-column-dropdown", placeholder="Select column for DCA"),
+
+        # html.Br(),
+
+        # # انتخاب بازه زمانی
+        # dcc.DatePickerRange(
+        #     id='dca-date-range',
+        #     start_date_placeholder_text="Start Date",
+        #     end_date_placeholder_text="End Date",
+        # ),
+
+        # html.Br(), html.Br(),
+
+        # # دکمه اجرا
+        # dbc.Button("Calculate DCA", id="run-dca-button", color="primary", className="mt-2"),
+
+        # # html.Div([
+        # #     html.H5("Decline Curve Analysis"),
+        # #     dcc.Dropdown(id="dca-column-dropdown", placeholder="Select a column for DCA"),
+        # #     html.Br(),
+        # #     html.Button("Run Hyperbolic DCA", id="run-dca-btn", className="btn btn-primary"),
+        # #     html.Br(), html.Br(),
+        # #     dcc.Graph(id="dca-graph"),
+        # #     html.Div(id="dca-results", style={"marginTop": "20px"})
+        # # ]),
+
+        # # html.Div(id="dca-output", className="mt-3 text-success")
+    ]),
+    className="mt-3 border border-primary-subtle",
+    style={"backgroundColor": "#ffffff", "padding": "10px", "borderRadius": "6px"}
 )
-
 
 
 controls22 = dbc.Card(
@@ -298,78 +346,78 @@ controls22 = dbc.Card(
 
 
 
-controls3 = dbc.Card(
-    [
-        html.H4([
-            html.I(className="bi bi-graph-up-arrow me-2"),
-            "Probabilistic Analysis"
-        ]),
-        html.H6("Economic limit production rate (qa):", className="fw-bold"),
-        dbc.Input(
-            type="number", id='inputqa', value=10000,
-            placeholder="Enter economic limit (qa)",
-            style={"marginBottom": "10px"}
-        ),
+# controls3 = dbc.Card(
+#     [
+#         html.H4([
+#             html.I(className="bi bi-graph-up-arrow me-2"),
+#             "Probabilistic Analysis"
+#         ]),
+#         html.H6("Economic limit production rate (qa):", className="fw-bold"),
+#         dbc.Input(
+#             type="number", id='inputqa', value=10000,
+#             placeholder="Enter economic limit (qa)",
+#             style={"marginBottom": "10px"}
+#         ),
 
-        html.Div(id='textarea-Np-output', style={'whiteSpace': 'pre-line'}),
+#         html.Div(id='textarea-Np-output', style={'whiteSpace': 'pre-line'}),
 
-        dbc.Row([
-            # Graph
-            dbc.Col(dcc.Graph(id="uncertainty-graph"), md=7),
+#         dbc.Row([
+#             # Graph
+#             dbc.Col(dcc.Graph(id="uncertainty-graph"), md=7),
 
-            # Distribution Inputs
-            dbc.Col([
-                html.H6("Probability Distribution", className="fw-bold"),
-                dcc.RadioItems(
-                    id='prob-dist-button',
-                    options=[
-                        {"label": "Triangular", "value": "Triangular"},
-                        {"label": "Normal", "value": "Normal"},
-                    ],
-                    value='Triangular',
-                    labelStyle={"display": "block", "marginBottom": "5px"},
-                    style={"marginBottom": "15px"}
-                ),
+#             # Distribution Inputs
+#             dbc.Col([
+#                 html.H6("Probability Distribution", className="fw-bold"),
+#                 dcc.RadioItems(
+#                     id='prob-dist-button',
+#                     options=[
+#                         {"label": "Triangular", "value": "Triangular"},
+#                         {"label": "Normal", "value": "Normal"},
+#                     ],
+#                     value='Triangular',
+#                     labelStyle={"display": "block", "marginBottom": "5px"},
+#                     style={"marginBottom": "15px"}
+#                 ),
 
-                html.Div([
-                    html.H6("Triangular Parameters", className="fw-bold"),
-                    dbc.InputGroup([
-                        dbc.InputGroupText("Left %"),
-                        dbc.Input(
-                            id="Trinangular-left",
-                            placeholder="e.g. 20", value=20,
-                            min=0, max=100, type="number"
-                        )
-                    ], className="mb-2"),
+#                 html.Div([
+#                     html.H6("Triangular Parameters", className="fw-bold"),
+#                     dbc.InputGroup([
+#                         dbc.InputGroupText("Left %"),
+#                         dbc.Input(
+#                             id="Trinangular-left",
+#                             placeholder="e.g. 20", value=20,
+#                             min=0, max=100, type="number"
+#                         )
+#                     ], className="mb-2"),
 
-                    dbc.InputGroup([
-                        dbc.InputGroupText("Right %"),
-                        dbc.Input(
-                            id="Trinangular-right",
-                            placeholder="e.g. 20", value=20,
-                            min=0, max=100, type="number"
-                        )
-                    ], className="mb-3"),
-                ]),
+#                     dbc.InputGroup([
+#                         dbc.InputGroupText("Right %"),
+#                         dbc.Input(
+#                             id="Trinangular-right",
+#                             placeholder="e.g. 20", value=20,
+#                             min=0, max=100, type="number"
+#                         )
+#                     ], className="mb-3"),
+#                 ]),
 
-                html.Div([
-                    html.H6("Normal Parameters", className="fw-bold"),
-                    dbc.InputGroup([
-                        dbc.InputGroupText("STD % of mean"),
-                        dbc.Input(
-                            id="Normal-std",
-                            placeholder="e.g. 30", value=30,
-                            min=0, max=100, type="number"
-                        )
-                    ])
-                ])
-            ], md=5)
-        ])
-    ],
-    body=True,
-    color="#F9F9F9",
-    className="shadow-sm"
-)
+#                 html.Div([
+#                     html.H6("Normal Parameters", className="fw-bold"),
+#                     dbc.InputGroup([
+#                         dbc.InputGroupText("STD % of mean"),
+#                         dbc.Input(
+#                             id="Normal-std",
+#                             placeholder="e.g. 30", value=30,
+#                             min=0, max=100, type="number"
+#                         )
+#                     ])
+#                 ])
+#             ], md=5)
+#         ])
+#     ],
+#     body=True,
+#     color="#F9F9F9",
+#     className="shadow-sm"
+# )
 
 
 
@@ -398,31 +446,29 @@ app.layout = html.Div(
                                     className="mb-4"
                                 ),
 
-                                html.Div(id='div1', className="mb-4"),
-
                                 dbc.Row(
                                     [
-                                        dbc.Col(cleaningSection, md=12),
+                                        dbc.Col(declineCurveAnalysis, md=12),
                                     ],
                                     className="mb-4"
                                 ),
 
                                 html.Div(id='div1', className="mb-4"),
 
-                                dbc.Card(
-                                    [
-                                        dbc.CardHeader("Peak Detection & Forecasting"),
-                                        dbc.CardBody(
-                                            dbc.Row(
-                                                [
-                                                    dbc.Col(controls22, md=6),
-                                                    dbc.Col(controls3, md=6),
-                                                ]
-                                            )
-                                        ),
-                                    ],
-                                    className="mb-4"
-                                ),
+                                # dbc.Card(
+                                #     [
+                                #         dbc.CardHeader("Peak Detection & Forecasting"),
+                                #         dbc.CardBody(
+                                #             dbc.Row(
+                                #                 [
+                                #                     dbc.Col(controls22, md=6),
+                                #                     dbc.Col(controls3, md=6),
+                                #                 ]
+                                #             )
+                                #         ),
+                                #     ],
+                                #     className="mb-4"
+                                # ),
 
                                 html.Div(id='div2', className="mb-4"),
 
@@ -534,32 +580,6 @@ def update_output(icontents, ifilename, date):
         dffPeaks.to_json(date_format='iso', orient='split')
     ]
 
-# @app.callback(
-#     Output("data-preview-graph", "figure"),
-#     Input("checklistfiles", "value"),
-#     State("dataframevalue", "data"),
-# )
-# def update_graph(selected_columns, jsonified_df):
-#     if not selected_columns or not jsonified_df:
-#         return go.Figure()
-
-#     df = pd.read_json(jsonified_df, orient='split')
-
-#     fig = go.Figure()
-
-#     for col in selected_columns:
-#         if col in df.columns:
-#             fig.add_trace(go.Scatter(x=df["Date"], y=df[col], mode='lines+markers', name=col))
-
-#     fig.update_layout(
-#         title="Selected Data Columns",
-#         xaxis_title="Date",
-#         yaxis_title="Values",
-#         template="plotly_white"
-#     )
-
-#     return fig
-
 @app.callback(
     Output("data-preview-graph", "figure"),
     [
@@ -669,58 +689,58 @@ def update_graph(selected_columns, df_json, peaks_json, show_peaks, start_date, 
     return fig
 #------------------------------------------------------------------------------
 
-# updating the dropdown of x and y for graph by browsed files
-@app.callback(
-    [
-          Output('x-variable', 'options'),
-          Output('y-variable', 'options'),
-          Output('x-variable', 'value'),
-          Output('y-variable', 'value'),
-    ],
-    [
-        Input('upload-data', 'contents'),
-        Input('upload-data', 'filename'),
-        Input('dataframevalue', 'data'),
-        Input('dataframepeaksvalue', 'data'),
-        # Input("ChecklistOptionsMonth", "value"),        
-    ],
-)
+# # updating the dropdown of x and y for graph by browsed files
+# @app.callback(
+#     [
+#           Output('x-variable', 'options'),
+#           Output('y-variable', 'options'),
+#           Output('x-variable', 'value'),
+#           Output('y-variable', 'value'),
+#     ],
+#     [
+#         Input('upload-data', 'contents'),
+#         Input('upload-data', 'filename'),
+#         Input('dataframevalue', 'data'),
+#         Input('dataframepeaksvalue', 'data'),
+#         # Input("ChecklistOptionsMonth", "value"),        
+#     ],
+# )
 
-def update_date_dropdown(icontents, ifilename,dfvalue,dfPeaksvalue):
+# def update_date_dropdown(icontents, ifilename,dfvalue,dfPeaksvalue):
     
-    xlabel=""
-    ylabel=""
-    dff = pd.DataFrame(columns=["Date"])
-    dffPeaks = pd.DataFrame(columns=["Date"])
-    dff = dff.set_index("Date")
-    dffPeaks = dffPeaks.set_index("Date")
+#     xlabel=""
+#     ylabel=""
+#     dff = pd.DataFrame(columns=["Date"])
+#     dffPeaks = pd.DataFrame(columns=["Date"])
+#     dff = dff.set_index("Date")
+#     dffPeaks = dffPeaks.set_index("Date")
     
-    if icontents:
-    #     for i,contents in enumerate(icontents):
-    #         contents = icontents[i]
-    #         filename = ifilename[i]
-    #         df1,dfPeaks1,dateCol = parse_data(contents, filename,[''])
-    #         df1 = df1.set_index(dateCol)
-    #         dfPeaks1 = dfPeaks1.set_index(dateCol)
+#     if icontents:
+#     #     for i,contents in enumerate(icontents):
+#     #         contents = icontents[i]
+#     #         filename = ifilename[i]
+#     #         df1,dfPeaks1,dateCol = parse_data(contents, filename,[''])
+#     #         df1 = df1.set_index(dateCol)
+#     #         dfPeaks1 = dfPeaks1.set_index(dateCol)
     
-    #         dff = pd.concat([dff, df1], axis=1)
-    #         dffPeaks = pd.concat([dffPeaks, dfPeaks1], axis=1)
+#     #         dff = pd.concat([dff, df1], axis=1)
+#     #         dffPeaks = pd.concat([dffPeaks, dfPeaks1], axis=1)
         
-    #     dff.drop("index", axis=1, inplace=True)
-    #     dffPeaks.drop("index", axis=1, inplace=True)   
-    #     dff=dff.reset_index()
-    #     dffPeaks=dffPeaks.reset_index()
+#     #     dff.drop("index", axis=1, inplace=True)
+#     #     dffPeaks.drop("index", axis=1, inplace=True)   
+#     #     dff=dff.reset_index()
+#     #     dffPeaks=dffPeaks.reset_index()
 
 
-        dff=pd.read_json(dfvalue, orient='split')
-        dffPeaks=pd.read_json(dfPeaksvalue, orient='split')
-        xlabel=dff.columns[0]
-        ylabel=dff.columns[1]
+#         dff=pd.read_json(dfvalue, orient='split')
+#         dffPeaks=pd.read_json(dfPeaksvalue, orient='split')
+#         xlabel=dff.columns[0]
+#         ylabel=dff.columns[1]
 
         
-        return [{'label': col, 'value': col} for col in dff.columns],[{'label': col, 'value': col} for col in dff.columns],str(xlabel),str(ylabel)
-    else:
-        raise dash.exceptions.PreventUpdate
+#         return [{'label': col, 'value': col} for col in dff.columns],[{'label': col, 'value': col} for col in dff.columns],str(xlabel),str(ylabel)
+#     else:
+        # raise dash.exceptions.PreventUpdate
 #------------------------------------------------------------------------------
 @app.callback([
      Output('selected-data-printout', 'children'),
@@ -780,297 +800,297 @@ def show_hide_element(DistRadioButton):
         return {'display': 'none'}
    
 #------------------------------------------------------------------------------
-@app.callback([
-    Output('DCA-parameters-printout', 'children'),
-    Output("textarea-Np-output", "children"),
-    Output("cluster-graph", "figure"),
-    Output("dca-graph", "figure"),
-    Output("uncertainty-graph", "figure"),
-    Output('DataTable', 'data'),
-    Output('DataTable', 'columns')],    
-    [
-        Input('upload-data', 'contents'),
-        Input('upload-data', 'filename'),
-        Input("x-variable", "value"),
-        Input("y-variable", "value"),
-        Input("ChecklistOptionsPeaks", "value"),
-        Input("ChecklistOptionsMonth", "value"),    
-        Input("ChecklistOptionsSum", "value"),    
-        Input("slider_numberofmonths", "value"),    
-        Input("inputqa", "value"),    
-        Input('dataframevalue', 'data'),
-        Input('dataframepeaksvalue', 'data'),
-        Input('dataframepeaksvalueUseForDCA', 'data'),
-        Input(component_id='Trinangular-left', component_property='value'),       
-        Input(component_id='Trinangular-right', component_property='value'),       
-        Input(component_id='Normal-std', component_property='value'),
-        Input(component_id='prob-dist-button', component_property='value'),
-        Input("ChecklistOptionsDeclineCurve", "value")]
-)
-def make_graph(icontents, ifilename,  xvalue, yvalue,ChecklistOptionsPeaks,ChecklistOptionsMonth,ChecklistOptionsSum,
-               numberOfMonths,qa,dfvalue,dfPeaksvalue,dfPeaksvalueForDCA,
-               triangularLeft,triangularRight,normalSTD,DistRadioButton,
-               ChecklistOptionsDeclineCurve):
-    P05Np=0
-    P95Np=0
-    meanNp=0
+# @app.callback([
+#     Output('DCA-parameters-printout', 'children'),
+#     Output("textarea-Np-output", "children"),
+#     Output("cluster-graph", "figure"),
+#     Output("dca-graph", "figure"),
+#     Output("uncertainty-graph", "figure"),
+#     Output('DataTable', 'data'),
+#     Output('DataTable', 'columns')],    
+#     [
+#         Input('upload-data', 'contents'),
+#         Input('upload-data', 'filename'),
+#         Input("x-variable", "value"),
+#         Input("y-variable", "value"),
+#         Input("ChecklistOptionsPeaks", "value"),
+#         Input("ChecklistOptionsMonth", "value"),    
+#         Input("ChecklistOptionsSum", "value"),    
+#         Input("slider_numberofmonths", "value"),    
+#         Input("inputqa", "value"),    
+#         Input('dataframevalue', 'data'),
+#         Input('dataframepeaksvalue', 'data'),
+#         Input('dataframepeaksvalueUseForDCA', 'data'),
+#         Input(component_id='Trinangular-left', component_property='value'),       
+#         Input(component_id='Trinangular-right', component_property='value'),       
+#         Input(component_id='Normal-std', component_property='value'),
+#         Input(component_id='prob-dist-button', component_property='value'),
+#         Input("ChecklistOptionsDeclineCurve", "value")]
+# )
+# def make_graph(icontents, ifilename,  xvalue, yvalue,ChecklistOptionsPeaks,ChecklistOptionsMonth,ChecklistOptionsSum,
+#                numberOfMonths,qa,dfvalue,dfPeaksvalue,dfPeaksvalueForDCA,
+#                triangularLeft,triangularRight,normalSTD,DistRadioButton,
+#                ChecklistOptionsDeclineCurve):
+#     P05Np=0
+#     P95Np=0
+#     meanNp=0
     
-    data=[]
-    TableData,TableCols=[],[]
-    layout = {"xaxis": {"title": "X"}, "yaxis": {"title": "Y"}}
+#     data=[]
+#     TableData,TableCols=[],[]
+#     layout = {"xaxis": {"title": "X"}, "yaxis": {"title": "Y"}}
    
     
-    fig = go.Figure()
-    fig2 = go.Figure()
-    fig3 = go.Figure()
+#     fig = go.Figure()
+#     fig2 = go.Figure()
+#     fig3 = go.Figure()
 
-    fig.update_layout(clickmode='event+select')
+#     fig.update_layout(clickmode='event+select')
 
-    yvalue=str(yvalue)
-    yvalue=yvalue.replace('[','')
-    yvalue=yvalue.replace(']','')
-    yvalue=yvalue.replace("'",'')
-    yvalue=yvalue.split(",")
+#     yvalue=str(yvalue)
+#     yvalue=yvalue.replace('[','')
+#     yvalue=yvalue.replace(']','')
+#     yvalue=yvalue.replace("'",'')
+#     yvalue=yvalue.split(",")
 
-    df = pd.DataFrame(columns=["Date"])
-    dfPeaks = pd.DataFrame(columns=["Date"])
+#     df = pd.DataFrame(columns=["Date"])
+#     dfPeaks = pd.DataFrame(columns=["Date"])
     
-    df = df.set_index("Date")
-    dfPeaks = dfPeaks.set_index("Date")
-    # if contents:
-    if icontents:
-        for i,contents in enumerate(icontents):
-            contents = icontents[i]
-            filename = ifilename[i]
+#     df = df.set_index("Date")
+#     dfPeaks = dfPeaks.set_index("Date")
+#     # if contents:
+#     if icontents:
+#         for i,contents in enumerate(icontents):
+#             contents = icontents[i]
+#             filename = ifilename[i]
         
-        df=pd.read_json(dfvalue, orient='split')
-        dfPeaks=pd.read_json(dfPeaksvalue, orient='split')
-        if dfPeaksvalueForDCA:
-            dfPeaksForDCA=pd.read_json(dfPeaksvalueForDCA, orient='split')
-        else:
-            dfPeaksForDCA=pd.DataFrame(columns=["Date","ShowOnGraph"])
-        tempmjd=df.reset_index()
-        dfSelectedFields=tempmjd[xvalue]
-        # dfSelectedFields=pd.concat([dfSelectedFields,dfPeaks['ShowOnGraph']],axis=1)
+#         df=pd.read_json(dfvalue, orient='split')
+#         dfPeaks=pd.read_json(dfPeaksvalue, orient='split')
+#         if dfPeaksvalueForDCA:
+#             dfPeaksForDCA=pd.read_json(dfPeaksvalueForDCA, orient='split')
+#         else:
+#             dfPeaksForDCA=pd.DataFrame(columns=["Date","ShowOnGraph"])
+#         tempmjd=df.reset_index()
+#         dfSelectedFields=tempmjd[xvalue]
+#         # dfSelectedFields=pd.concat([dfSelectedFields,dfPeaks['ShowOnGraph']],axis=1)
         
 
-        # TableData,TableCols=df.to_dict('records'), [{"name": i, "id": i} for i in df.columns]
-        dfTable=pd.concat([df.set_index(xvalue),dfPeaks.set_index(xvalue)],axis=1)
-        # dfTable=dfTable.reset_index()
+#         # TableData,TableCols=df.to_dict('records'), [{"name": i, "id": i} for i in df.columns]
+#         dfTable=pd.concat([df.set_index(xvalue),dfPeaks.set_index(xvalue)],axis=1)
+#         # dfTable=dfTable.reset_index()
         
-        for idx, yy in enumerate(yvalue):
-            dfSelectedFields=pd.concat([dfSelectedFields,df[yy.strip()]],axis=1)
-            tempdf=df.filter([xvalue,yy.strip()])
-            tempdf.replace("", np.nan, inplace=True)
-            tempdf.dropna(inplace=True)
-            # tempdf=df
-            fig.add_trace(
-                    go.Scatter(
-                        x=tempdf[xvalue],
-                        y=tempdf[yy.strip()],
-                        mode="markers",
-                        marker={"size": 8},
-                        yaxis='y1' ,
-                        name=str(yy),
-                    )) 
-        if 'showTotal' in(ChecklistOptionsSum):
-            dfSelectedFields['Total'] = dfSelectedFields.sum(axis=1)
+#         for idx, yy in enumerate(yvalue):
+#             dfSelectedFields=pd.concat([dfSelectedFields,df[yy.strip()]],axis=1)
+#             tempdf=df.filter([xvalue,yy.strip()])
+#             tempdf.replace("", np.nan, inplace=True)
+#             tempdf.dropna(inplace=True)
+#             # tempdf=df
+#             fig.add_trace(
+#                     go.Scatter(
+#                         x=tempdf[xvalue],
+#                         y=tempdf[yy.strip()],
+#                         mode="markers",
+#                         marker={"size": 8},
+#                         yaxis='y1' ,
+#                         name=str(yy),
+#                     )) 
+#         if 'showTotal' in(ChecklistOptionsSum):
+#             dfSelectedFields['Total'] = dfSelectedFields.sum(axis=1)
             
-            fig2.add_trace(
-                    go.Scatter(
-                        x=df[xvalue],
-                        y=dfSelectedFields['Total'],
-                        mode="markers",
-                        marker={"size": 8,"color":"black", "symbol":"circle"},
-                        yaxis='y1',
-                        name="Total",
-                    ))            
-            indices = findPeaks(dfSelectedFields, 'Total', 1.0)
-            sample_list = [contents, filename, dfSelectedFields,indices]
-            # file_name = "GraphSelectedData.pkl"
-            # open_file = open(file_name, "wb")
-            # pickle.dump(sample_list, open_file)
-            # open_file.close()
-            dfPeaksTotal = dfSelectedFields.iloc[indices,:]
-            dfPeaksTotal['ShowOnGraph']=True
-            if dfPeaksForDCA.empty:
-                dfPeaksForDCA=dfPeaksTotal.copy()
+#             fig2.add_trace(
+#                     go.Scatter(
+#                         x=df[xvalue],
+#                         y=dfSelectedFields['Total'],
+#                         mode="markers",
+#                         marker={"size": 8,"color":"black", "symbol":"circle"},
+#                         yaxis='y1',
+#                         name="Total",
+#                     ))            
+#             indices = findPeaks(dfSelectedFields, 'Total', 1.0)
+#             sample_list = [contents, filename, dfSelectedFields,indices]
+#             # file_name = "GraphSelectedData.pkl"
+#             # open_file = open(file_name, "wb")
+#             # pickle.dump(sample_list, open_file)
+#             # open_file.close()
+#             dfPeaksTotal = dfSelectedFields.iloc[indices,:]
+#             dfPeaksTotal['ShowOnGraph']=True
+#             if dfPeaksForDCA.empty:
+#                 dfPeaksForDCA=dfPeaksTotal.copy()
 
             
-            dfPeaksTotal=dfPeaksTotal.reset_index()
-            if 'showPeaks' in(ChecklistOptionsPeaks):       
-                fig2.add_trace(
-                    go.Scatter(
-                        x=dfPeaksTotal[xvalue],
-                        y=dfPeaksTotal['Total'],
-                        mode="markers",
-                        marker={"size": 8,"color":"red", "symbol":"diamond"},
-                        yaxis='y1' ,
-                        name=" Total Peaks",
-                    ))
+#             dfPeaksTotal=dfPeaksTotal.reset_index()
+#             if 'showPeaks' in(ChecklistOptionsPeaks):       
+#                 fig2.add_trace(
+#                     go.Scatter(
+#                         x=dfPeaksTotal[xvalue],
+#                         y=dfPeaksTotal['Total'],
+#                         mode="markers",
+#                         marker={"size": 8,"color":"red", "symbol":"diamond"},
+#                         yaxis='y1' ,
+#                         name=" Total Peaks",
+#                     ))
 
-            sample_list = [dfSelectedFields,dfPeaksForDCA,dfPeaksTotal,df]
-            file_name = "ArpesData.pkl"
-            open_file = open(file_name, "wb")
-            pickle.dump(sample_list, open_file)
-            open_file.close()
+#             sample_list = [dfSelectedFields,dfPeaksForDCA,dfPeaksTotal,df]
+#             file_name = "ArpesData.pkl"
+#             open_file = open(file_name, "wb")
+#             pickle.dump(sample_list, open_file)
+#             open_file.close()
                       
-            mjddfPeaksTotalForDCA = pd.concat([df[xvalue],dfSelectedFields['Total'],dfPeaksForDCA['ShowOnGraph']], axis=1)
-            dfPeaksTotalForDCA=mjddfPeaksTotalForDCA[mjddfPeaksTotalForDCA['ShowOnGraph'] ==True] 
+#             mjddfPeaksTotalForDCA = pd.concat([df[xvalue],dfSelectedFields['Total'],dfPeaksForDCA['ShowOnGraph']], axis=1)
+#             dfPeaksTotalForDCA=mjddfPeaksTotalForDCA[mjddfPeaksTotalForDCA['ShowOnGraph'] ==True] 
             
-            dfPeaksTotalForDCA=dfPeaksTotalForDCA.reset_index()
-            if 'showPeaks' in(ChecklistOptionsPeaks):       
-                fig2.add_trace(
-                    go.Scatter(
-                        x=dfPeaksTotalForDCA[xvalue],
-                        y=dfPeaksTotalForDCA['Total'],
-                        mode="markers",
-                        marker={"size": 8,"color":"blue", "symbol":"square"},
-                        yaxis='y1' ,
-                        name=" DCA Peaks",
-                    ))
+#             dfPeaksTotalForDCA=dfPeaksTotalForDCA.reset_index()
+#             if 'showPeaks' in(ChecklistOptionsPeaks):       
+#                 fig2.add_trace(
+#                     go.Scatter(
+#                         x=dfPeaksTotalForDCA[xvalue],
+#                         y=dfPeaksTotalForDCA['Total'],
+#                         mode="markers",
+#                         marker={"size": 8,"color":"blue", "symbol":"square"},
+#                         yaxis='y1' ,
+#                         name=" DCA Peaks",
+#                     ))
 
 
 
 
-            Arpesdf=pd.DataFrame()
-            Duongdf=pd.DataFrame()
+#             Arpesdf=pd.DataFrame()
+#             Duongdf=pd.DataFrame()
             
 
-            if 'showArpes' in(ChecklistOptionsDeclineCurve): 
+#             if 'showArpes' in(ChecklistOptionsDeclineCurve): 
        
-                dcayy={"Total"}
-                for idx, yy in enumerate(dcayy):
-                    '''
-                    sample_list = [dfSelectedFields,dfPeaksTotalForDCA,xvalue,yy,qa,numberOfMonths,DistRadioButton]
-                    file_name = "ArpesData.pkl"
-                    open_file = open(file_name, "wb")
-                    pickle.dump(sample_list, open_file)
-                    open_file.close()
-                    '''
+#                 dcayy={"Total"}
+#                 for idx, yy in enumerate(dcayy):
+#                     '''
+#                     sample_list = [dfSelectedFields,dfPeaksTotalForDCA,xvalue,yy,qa,numberOfMonths,DistRadioButton]
+#                     file_name = "ArpesData.pkl"
+#                     open_file = open(file_name, "wb")
+#                     pickle.dump(sample_list, open_file)
+#                     open_file.close()
+#                     '''
                    
-                    dfFitted,PeaksIndices,dfFittedLastPeak, t0, qi,b,Di=computeArpes(dfSelectedFields,dfPeaksTotalForDCA,xvalue,yy,qa,numberOfMonths,
-                                                                                     int(triangularLeft),int(triangularRight),int(normalSTD),DistRadioButton)
-                    Arpesdf=pd.DataFrame([[t0, qi,b,Di]], columns=['t0', 'qi','b','Di'])   
-                    for mjd2idx,mjd2 in enumerate(PeaksIndices):
-                      if mjd2idx==(len(PeaksIndices)-1):
-                          fig3.add_trace(
-                              go.Scatter(
-                                  x=dfFittedLastPeak[xvalue],
-                                  y=dfFittedLastPeak[yy.strip()+" (Arpes,Peak:"+str(mjd2idx)+")"],
-                                  mode="lines",
-                                  name=str(yy)+"Arpes"+str(mjd2idx+1)+")",
-                              ))
-                          fig3.add_trace(
-                              go.Scatter(
-                                  x=dfFittedLastPeak[xvalue],
-                                  y=dfFittedLastPeak[yy.strip()+"ArpesP95"],
-                                  mode="lines",
-                                  fill=None,
-                                  name=str(yy)+"ArpesP95",
-                              ))
-                          fig3.add_trace(
-                              go.Scatter(
-                                  x=dfFittedLastPeak[xvalue],
-                                  y=dfFittedLastPeak[yy.strip()+"ArpesP05"],
-                                  mode="lines",
-                                  fill="tonexty",
-                                  name=str(yy)+"ArpesP05",
-                              ))
+#                     dfFitted,PeaksIndices,dfFittedLastPeak, t0, qi,b,Di=computeArpes(dfSelectedFields,dfPeaksTotalForDCA,xvalue,yy,qa,numberOfMonths,
+#                                                                                      int(triangularLeft),int(triangularRight),int(normalSTD),DistRadioButton)
+#                     Arpesdf=pd.DataFrame([[t0, qi,b,Di]], columns=['t0', 'qi','b','Di'])   
+#                     for mjd2idx,mjd2 in enumerate(PeaksIndices):
+#                       if mjd2idx==(len(PeaksIndices)-1):
+#                           fig3.add_trace(
+#                               go.Scatter(
+#                                   x=dfFittedLastPeak[xvalue],
+#                                   y=dfFittedLastPeak[yy.strip()+" (Arpes,Peak:"+str(mjd2idx)+")"],
+#                                   mode="lines",
+#                                   name=str(yy)+"Arpes"+str(mjd2idx+1)+")",
+#                               ))
+#                           fig3.add_trace(
+#                               go.Scatter(
+#                                   x=dfFittedLastPeak[xvalue],
+#                                   y=dfFittedLastPeak[yy.strip()+"ArpesP95"],
+#                                   mode="lines",
+#                                   fill=None,
+#                                   name=str(yy)+"ArpesP95",
+#                               ))
+#                           fig3.add_trace(
+#                               go.Scatter(
+#                                   x=dfFittedLastPeak[xvalue],
+#                                   y=dfFittedLastPeak[yy.strip()+"ArpesP05"],
+#                                   mode="lines",
+#                                   fill="tonexty",
+#                                   name=str(yy)+"ArpesP05",
+#                               ))
                       
                   
-                      fig2.add_trace(
-                          go.Scatter(
-                              x=dfFitted[xvalue],
-                              y=dfFitted[yy.strip()+" (Arpes,Peak:"+str(mjd2idx)+")"],
-                              mode="lines",
-                              yaxis='y1' ,
-                              name=str(yy)+" (Arpes,Peak:"+")",
-                          ))
+#                       fig2.add_trace(
+#                           go.Scatter(
+#                               x=dfFitted[xvalue],
+#                               y=dfFitted[yy.strip()+" (Arpes,Peak:"+str(mjd2idx)+")"],
+#                               mode="lines",
+#                               yaxis='y1' ,
+#                               name=str(yy)+" (Arpes,Peak:"+")",
+#                           ))
     
 
-                dfFitted=dfFitted.set_index(xvalue)
-                dfTable=pd.concat([dfTable,dfFitted],axis=1,join='outer')
+#                 dfFitted=dfFitted.set_index(xvalue)
+#                 dfTable=pd.concat([dfTable,dfFitted],axis=1,join='outer')
     
-            if 'showDuong' in(ChecklistOptionsDeclineCurve):       
-                dcayy={"Total"}
-                for idx, yy in enumerate(dcayy):
-                    dfFitted,PeaksIndices,dfFittedLastPeak,t0, q1,q_inf, a, m=computeDuong(dfSelectedFields,dfPeaksTotalForDCA,xvalue,yy,qa,numberOfMonths,
-                                                                                           int(triangularLeft),int(triangularRight),int(normalSTD),DistRadioButton)
-                    Duongdf=pd.DataFrame([[t0, q1,q_inf, a, m]],columns=['t0', 'q1','q_inf', 'a', 'm'])              
-                    '''
-                    sample_list = [dfFitted,PeaksIndices,dfFittedLastPeak]
-                    file_name = "ArpesData.pkl"
-                    open_file = open(file_name, "wb")
-                    pickle.dump(sample_list, open_file)
-                    open_file.close()
-                    '''                
-                    for mjd2idx,mjd2 in enumerate(PeaksIndices):
-                        if mjd2idx==(len(PeaksIndices)-1):
-                            fig3.add_trace(
-                                go.Scatter(
-                                    x=dfFittedLastPeak[xvalue],
-                                    y=dfFittedLastPeak[yy.strip()+" (Duong,Peak:"+str(mjd2idx)+")"],
-                                    mode="lines",
-                                    name=str(yy)+"Duong"+str(mjd2idx+1)+")",
-                                ))
-                            fig3.add_trace(
-                                go.Scatter(
-                                    x=dfFittedLastPeak[xvalue],
-                                    y=dfFittedLastPeak["DuongP95"],
-                                    mode="lines",
-                                    fill=None,
-                                    name=str(yy)+"DuongP95",
-                                ))
-                            fig3.add_trace(
-                                go.Scatter(
-                                    x=dfFittedLastPeak[xvalue],
-                                    y=dfFittedLastPeak["DuongP05"],
-                                    mode="lines",
-                                    fill="tonexty",
-                                    name=str(yy)+"DuongP05",
-                                ))
+#             if 'showDuong' in(ChecklistOptionsDeclineCurve):       
+#                 dcayy={"Total"}
+#                 for idx, yy in enumerate(dcayy):
+#                     dfFitted,PeaksIndices,dfFittedLastPeak,t0, q1,q_inf, a, m=computeDuong(dfSelectedFields,dfPeaksTotalForDCA,xvalue,yy,qa,numberOfMonths,
+#                                                                                            int(triangularLeft),int(triangularRight),int(normalSTD),DistRadioButton)
+#                     Duongdf=pd.DataFrame([[t0, q1,q_inf, a, m]],columns=['t0', 'q1','q_inf', 'a', 'm'])              
+#                     '''
+#                     sample_list = [dfFitted,PeaksIndices,dfFittedLastPeak]
+#                     file_name = "ArpesData.pkl"
+#                     open_file = open(file_name, "wb")
+#                     pickle.dump(sample_list, open_file)
+#                     open_file.close()
+#                     '''                
+#                     for mjd2idx,mjd2 in enumerate(PeaksIndices):
+#                         if mjd2idx==(len(PeaksIndices)-1):
+#                             fig3.add_trace(
+#                                 go.Scatter(
+#                                     x=dfFittedLastPeak[xvalue],
+#                                     y=dfFittedLastPeak[yy.strip()+" (Duong,Peak:"+str(mjd2idx)+")"],
+#                                     mode="lines",
+#                                     name=str(yy)+"Duong"+str(mjd2idx+1)+")",
+#                                 ))
+#                             fig3.add_trace(
+#                                 go.Scatter(
+#                                     x=dfFittedLastPeak[xvalue],
+#                                     y=dfFittedLastPeak["DuongP95"],
+#                                     mode="lines",
+#                                     fill=None,
+#                                     name=str(yy)+"DuongP95",
+#                                 ))
+#                             fig3.add_trace(
+#                                 go.Scatter(
+#                                     x=dfFittedLastPeak[xvalue],
+#                                     y=dfFittedLastPeak["DuongP05"],
+#                                     mode="lines",
+#                                     fill="tonexty",
+#                                     name=str(yy)+"DuongP05",
+#                                 ))
                             
                         
-                        fig2.add_trace(
-                            go.Scatter(
-                                x=dfFitted[xvalue],
-                                y=dfFitted[yy.strip()+" (Duong,Peak:"+str(mjd2idx)+")"],
-                                mode="lines",
-                                yaxis='y1' ,
-                                name=str(yy)+" (Duong,Peak:"+")",
-                            ))
-                dfFitted=dfFitted.set_index(xvalue)
-                dfTable=pd.concat([dfTable,dfFitted],axis=1,join='outer')
+#                         fig2.add_trace(
+#                             go.Scatter(
+#                                 x=dfFitted[xvalue],
+#                                 y=dfFitted[yy.strip()+" (Duong,Peak:"+str(mjd2idx)+")"],
+#                                 mode="lines",
+#                                 yaxis='y1' ,
+#                                 name=str(yy)+" (Duong,Peak:"+")",
+#                             ))
+#                 dfFitted=dfFitted.set_index(xvalue)
+#                 dfTable=pd.concat([dfTable,dfFitted],axis=1,join='outer')
 
                     
 
         
-        fig['layout'] = go.Layout( {"xaxis": {"title": xvalue} })
-        fig2['layout'] = go.Layout( {"title":"Data for DCA","xaxis": {"title": xvalue}, "yaxis": {"title":"total sum","overlaying": "y1"}})
-        fig3['layout'] = go.Layout( {"title":"Confidence Interval","xaxis": {"title": xvalue}, "yaxis": {"title":"","overlaying": "y1"}})
+#         fig['layout'] = go.Layout( {"xaxis": {"title": xvalue} })
+#         fig2['layout'] = go.Layout( {"title":"Data for DCA","xaxis": {"title": xvalue}, "yaxis": {"title":"total sum","overlaying": "y1"}})
+#         fig3['layout'] = go.Layout( {"title":"Confidence Interval","xaxis": {"title": xvalue}, "yaxis": {"title":"","overlaying": "y1"}})
                 
-        dfTable=dfTable.reset_index()
-        dfTable['index'] = np.arange(1, len(dfTable)+1)
-        dfTable = dfTable.loc[:,~dfTable.columns.duplicated()]
-        TableData,TableCols=dfTable.to_dict('records'), [{"name": i, "id": i} for i in dfTable.columns]    
-    # return 'Cumulative production Np= {:1f}, 90% confidence {:1f} - {:1f}'.format(meanNp, P95Np, P05Np) ,  fig,fig2,TableData,TableCols #go.Figure(data=data, layout=layout)
-    # strg=" Np= {:.1f}, 90% confidence {:.1f} - {:.1f}".format(meanNp, P95Np, P05Np)
-    strg=" Np= {:.0f}, 90% confidence {:.0f} - {:.0f}".format(float(meanNp), float(P05Np), float(P95Np))
-    fig.update_layout(
-        legend=dict(
-            x=1.5,
-            y=0,
-            traceorder="normal",
-            xanchor="left",
-            yanchor="top",
-        )
-    )
-    fig2.update_layout(
-        clickmode='event+select'
-    )
+#         dfTable=dfTable.reset_index()
+#         dfTable['index'] = np.arange(1, len(dfTable)+1)
+#         dfTable = dfTable.loc[:,~dfTable.columns.duplicated()]
+#         TableData,TableCols=dfTable.to_dict('records'), [{"name": i, "id": i} for i in dfTable.columns]    
+#     # return 'Cumulative production Np= {:1f}, 90% confidence {:1f} - {:1f}'.format(meanNp, P95Np, P05Np) ,  fig,fig2,TableData,TableCols #go.Figure(data=data, layout=layout)
+#     # strg=" Np= {:.1f}, 90% confidence {:.1f} - {:.1f}".format(meanNp, P95Np, P05Np)
+#     strg=" Np= {:.0f}, 90% confidence {:.0f} - {:.0f}".format(float(meanNp), float(P05Np), float(P95Np))
+#     fig.update_layout(
+#         legend=dict(
+#             x=1.5,
+#             y=0,
+#             traceorder="normal",
+#             xanchor="left",
+#             yanchor="top",
+#         )
+#     )
+#     fig2.update_layout(
+#         clickmode='event+select'
+#     )
 
-    return json.dumps(Arpesdf.to_json(date_format='iso',orient='split'), indent=2),       strg ,  fig,fig2,fig3,TableData,TableCols 
+#     return json.dumps(Arpesdf.to_json(date_format='iso',orient='split'), indent=2),       strg ,  fig,fig2,fig3,TableData,TableCols 
 
 
 #------------------------------------------------------------------------------
@@ -1217,6 +1237,79 @@ def computeDuong(df,dfPeaks,xvalue,yy,qa,numberOfMonths,triangularLeft,triangula
     dfDuong=dfDuong.reset_index()
        
     return dfDuong,PeaksIndices,dfFittedLastPeak,t0, q1,q_inf, a, m
+
+@app.callback(
+    Output("dca-column-dropdown", "options"),
+    Input("checklistfiles", "options")
+)
+def sync_dropdown_with_checklist(checklist_options):
+    return checklist_options
+
+# مدل hyperbolic
+def hyperbolic_decline(t, qi, Di, b):
+    return qi / (1 + b * Di * t) ** (1 / b)
+
+@app.callback(
+    [Output("dca-graph", "figure"),
+     Output("dca-results", "children")],
+    Input("run-dca-btn", "n_clicks"),
+    State("dca-column-dropdown", "value"),
+    State("dataframevalue", "data"),
+    prevent_initial_call=True
+)
+def run_hyperbolic_dca(n_clicks, column, df_json):
+    if not column or not df_json:
+        raise dash.exceptions.PreventUpdate
+
+    try:
+        df = pd.read_json(io.StringIO(df_json), orient='split')
+
+        if column not in df.columns:
+            return go.Figure(), html.Div(f"❌ ستون «{column}» در داده‌ها موجود نیست.")
+
+        if not pd.api.types.is_datetime64_any_dtype(df["Date"]):
+            df["Date"] = pd.to_datetime(df["Date"], errors='coerce')
+
+        df = df.dropna(subset=["Date", column])
+        df = df.sort_values("Date")
+
+        t = (df["Date"] - df["Date"].iloc[0]).dt.days.values
+        q = df[column].values
+
+        if q[0] <= 0:
+            return go.Figure(), html.Div("❌ مقدار اولیه نرخ تولید (qi) صفر یا منفی است.")
+
+        initial_guess = [q[0], 0.01, 0.5]
+        params, _ = curve_fit(hyperbolic_decline, t, q, p0=initial_guess, maxfev=10000)
+        qi, Di, b = params
+
+        q_fit = hyperbolic_decline(t, qi, Di, b)
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual Data"))
+        fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name="Hyperbolic Fit"))
+
+        fig.update_layout(
+            title=f"Hyperbolic DCA Fit - {column}",
+            xaxis_title="Date",
+            yaxis_title="Rate",
+            template="plotly_white"
+        )
+
+        result_text = f"""
+        📈 <b>Hyperbolic Decline Parameters:</b><br>
+        🔹 qi = {qi:.2f}<br>
+        🔹 Di = {Di:.4f} per day<br>
+        🔹 b = {b:.2f}
+        """
+
+        return fig, html.Div([dcc.Markdown(result_text, dangerously_allow_html=True)])
+
+    except Exception as e:
+        print("❌ Exception in DCA:", str(e))
+        return go.Figure(), html.Div(f"❌ Error fitting DCA: {e}")
+    
+
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
 
