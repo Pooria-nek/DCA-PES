@@ -12,6 +12,8 @@ from dash import dash_table
 import numpy as np
 import pickle
 import json
+from datetime import date
+from dash import Input, Output, State, html, dcc, callback, exceptions
 
 import sys
 import os
@@ -71,7 +73,7 @@ uploadSection = dbc.Card(
                 html.H5("Select data columns", className="mb-2"),
                 dcc.Checklist(
                     id="checklistfiles",
-                    options=[],  # دینامیک از طریق callback تنظیم می‌شه
+                    options=[],
                     value=[],
                     labelStyle={'display': 'block', 'marginBottom': '4px'},
                     inputStyle={"marginLeft": "10px", "marginRight": "5px"}
@@ -215,9 +217,18 @@ declineCurveAnalysis = dbc.Card(
             inline=True
         ),
 
+        dcc.DatePickerRange(
+            id='dca-date-range',
+            min_date_allowed=date(2000, 1, 1),
+            max_date_allowed=date(2100, 1, 1),
+            start_date=date(2010, 1, 1),  # مقدار نمونه، بعداً می‌تونی داینامیکش کنی از روی دیتا
+            end_date=date(2020, 1, 1),
+            display_format='YYYY-MM-DD',
+        ),
+
         dcc.Dropdown(id="dca-column-dropdown", placeholder="Select rate column..."),
         html.Br(),
-        html.Button("Run Hyperbolic DCA", id="run-dca-btn", n_clicks=0, className="btn btn-primary"),
+        html.Button("Run DCA", id="run-dca-btn", n_clicks=0, className="btn btn-primary"),
         html.Br(), html.Br(),
 
         dcc.Graph(id="dca-graph"),
@@ -1242,70 +1253,64 @@ def harmonic_decline(t, qi, Di):
     State("dca-column-dropdown", "value"),
     State("dca-model-selector", "value"),
     State("dataframevalue", "data"),
+    State("dca-date-range", "start_date"),
+    State("dca-date-range", "end_date"),
     prevent_initial_call=True
 )
-def run_dca_model(n_clicks, column, model, df_json):
+def run_dca_model(n_clicks, column, model_type, df_json, start_date, end_date):
     if not column or not df_json:
-        raise dash.exceptions.PreventUpdate
-
-    import io
-    df = pd.read_json(io.StringIO(df_json), orient='split')
-    df = df.dropna(subset=[column])
-    df = df.sort_values("Date")
-
-    t = (df["Date"] - df["Date"].iloc[0]).dt.days.values
-    q = df[column].values
+        raise exceptions.PreventUpdate
 
     try:
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual Data"))
+        df = pd.read_json(df_json, orient='split')
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.dropna(subset=[column])
+        df = df.sort_values("Date")
 
-        if model == "hyperbolic":
-            params, _ = curve_fit(hyperbolic_decline, t, q, p0=[q[0], 0.01, 0.5], maxfev=10000)
+        # fit by date range if specified
+        if start_date and end_date:
+            df = df[(df["Date"] >= pd.to_datetime(start_date)) & (df["Date"] <= pd.to_datetime(end_date))]
+
+        if df.empty:
+            return go.Figure(), html.Div("❌ No data in selected date range.")
+
+        # calculate time in days from the first date
+        t = (df["Date"] - df["Date"].iloc[0]).dt.days.values
+        q = df[column].values
+
+        if model_type == "hyperbolic":
+            initial_guess = [q[0], 0.01, 0.5]
+            params, _ = curve_fit(hyperbolic_decline, t, q, p0=initial_guess, maxfev=10000)
             qi, Di, b = params
             q_fit = hyperbolic_decline(t, qi, Di, b)
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual Data"))
             fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name="Hyperbolic Fit"))
-            result = f"""
-            📉 **Hyperbolic Decline:**  
+
+            fig.update_layout(
+                title=f"Hyperbolic Decline Fit - {column}",
+                xaxis_title="Date",
+                yaxis_title="Rate",
+                template="plotly_white"
+            )
+
+            result_text = f"""
+            📈 **Hyperbolic Decline Parameters**  
             🔹 qi = {qi:.2f}  
-            🔹 Di = {Di:.4f}  
-            🔹 b = {b:.2f}
+            🔹 Di = {Di:.4f} per day  
+            🔹 b = {b:.2f}  
+            🔸 Fit Range: {start_date} to {end_date}
             """
 
-        elif model == "exponential":
-            params, _ = curve_fit(exponential_decline, t, q, p0=[q[0], 0.01])
-            qi, Di = params
-            q_fit = exponential_decline(t, qi, Di)
-            fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name="Exponential Fit"))
-            result = f"""
-            📉 **Exponential Decline:**  
-            🔹 qi = {qi:.2f}  
-            🔹 Di = {Di:.4f}
-            """
+            return fig, dcc.Markdown(result_text)
 
-        elif model == "harmonic":
-            params, _ = curve_fit(harmonic_decline, t, q, p0=[q[0], 0.01])
-            qi, Di = params
-            q_fit = harmonic_decline(t, qi, Di)
-            fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name="Harmonic Fit"))
-            result = f"""
-            📉 **Harmonic Decline:**  
-            🔹 qi = {qi:.2f}  
-            🔹 Di = {Di:.4f}
-            """
-
-        fig.update_layout(
-            title=f"{model.capitalize()} Decline Curve Fit - {column}",
-            xaxis_title="Date",
-            yaxis_title="Rate",
-            template="plotly_white"
-        )
-
-        return fig, dcc.Markdown(result)
+        else:
+            return go.Figure(), html.Div("❌ Selected model not implemented.")
 
     except Exception as e:
-        return go.Figure(), html.Div(f"❌ Error fitting DCA: {e}")
-
+        return go.Figure(), html.Div(f"❌ Error fitting model: {e}")
+    
 #------------------------------------------------------------------------------
 #------------------------------------------------------------------------------
 
