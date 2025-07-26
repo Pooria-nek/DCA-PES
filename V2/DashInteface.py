@@ -14,6 +14,7 @@ import pickle
 import json
 from datetime import date
 from dash import Input, Output, State, html, dcc, callback, exceptions
+import time
 
 import sys
 import os
@@ -1278,41 +1279,83 @@ def run_dca_model(n_clicks, column, model_type, df_json, start_date, end_date):
         t = (df["Date"] - df["Date"].iloc[0]).dt.days.values
         q = df[column].values
 
-        if model_type == "hyperbolic":
-            initial_guess = [q[0], 0.01, 0.5]
-            params, _ = curve_fit(hyperbolic_decline, t, q, p0=initial_guess, maxfev=10000)
-            qi, Di, b = params
-            q_fit = hyperbolic_decline(t, qi, Di, b)
+        if model_type == "exponential":
+            func = exponential_decline
+            p0 = [q[0], 0.01]
+        elif model_type == "harmonic":
+            func = harmonic_decline
+            p0 = [q[0], 0.01]
+        elif model_type == "hyperbolic":
+            func = hyperbolic_decline
+            p0 = [q[0], 0.01, 0.5]
+
+        try:
+            start_time = time.time()
+            params, _ = curve_fit(func, t, q, p0=p0, maxfev=10000)
+            fit_time = time.time() - start_time
+
+            q_fit = func(t, *params)
 
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual Data"))
-            fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name="Hyperbolic Fit"))
+            fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name=f"{model_type.title()} Fit"))
 
             fig.update_layout(
-                title=f"Hyperbolic Decline Fit - {column}",
+                title=f"{model_type.title()} Decline Curve - {column}",
                 xaxis_title="Date",
                 yaxis_title="Rate",
                 template="plotly_white"
             )
 
-            result_text = f"""
-            📈 **Hyperbolic Decline Parameters**  
-            🔹 qi = {qi:.2f}  
-            🔹 Di = {Di:.4f} per day  
-            🔹 b = {b:.2f}  
-            🔸 Fit Range: {start_date} to {end_date}
-            """
+            result_text = f"<b>{model_type.title()} Decline Parameters:</b><br>"
+            if model_type == "hyperbolic":
+                qi, Di, b = params
+                result_text += f"🔹 qi = {qi:.2f}<br>🔹 Di = {Di:.4f} /day<br>🔹 b = {b:.2f}<br>"
+            else:
+                qi, Di = params
+                result_text += f"🔹 qi = {qi:.2f}<br>🔹 Di = {Di:.4f} /day<br>"
 
-            return fig, dcc.Markdown(result_text)
+            result_text += f"🔸 Fit Range: {start_date} to {end_date}<br>"
+            # result_text += f"<br>⏱️ Fit Time: {fit_time:.2f} seconds"
 
-        else:
-            return go.Figure(), html.Div("❌ Selected model not implemented.")
+            return fig, html.Div([dcc.Markdown(result_text, dangerously_allow_html=True)])
+        
+        except Exception as e:
+            return go.Figure(), html.Div(f"❌ Error fitting DCA: {e}")
+
+
+        # if model_type == "hyperbolic":
+        #     initial_guess = [q[0], 0.01, 0.5]
+        #     params, _ = curve_fit(hyperbolic_decline, t, q, p0=initial_guess, maxfev=10000)
+        #     qi, Di, b = params
+        #     q_fit = hyperbolic_decline(t, qi, Di, b)
+
+        #     fig = go.Figure()
+        #     fig.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual Data"))
+        #     fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name="Hyperbolic Fit"))
+
+        #     fig.update_layout(
+        #         title=f"Hyperbolic Decline Fit - {column}",
+        #         xaxis_title="Date",
+        #         yaxis_title="Rate",
+        #         template="plotly_white"
+        #     )
+
+        #     result_text = f"""
+        #     📈 **Hyperbolic Decline Parameters**  
+        #     🔹 qi = {qi:.2f}  
+        #     🔹 Di = {Di:.4f} per day  
+        #     🔹 b = {b:.2f}  
+        #     🔸 Fit Range: {start_date} to {end_date}
+        #     """
+
+        #     return fig, dcc.Markdown(result_text)
+
+        # else:
+        #     return go.Figure(), html.Div("❌ Selected model not implemented.")
 
     except Exception as e:
         return go.Figure(), html.Div(f"❌ Error fitting model: {e}")
-    
-#------------------------------------------------------------------------------
-#------------------------------------------------------------------------------
 
 if __name__ == "__main__":
     # app.run_server(debug=True, port=8888)
