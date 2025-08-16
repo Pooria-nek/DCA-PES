@@ -10,7 +10,6 @@ import plotly.graph_objs as go
 from dash.dependencies import Input, Output, State
 from dash import dash_table
 import numpy as np
-import pickle
 import json
 from datetime import date
 from dash import Input, Output, State, html, dcc, callback, exceptions
@@ -104,7 +103,6 @@ uploadSection = dbc.Card(
                 dbc.Checkbox(
                     id="show-peaks-toggle",
                     checked=True,
-                    # className="mb-2",
                 ),
                 html.Label("show peaks", htmlFor="show-peaks-toggle", style={"marginLeft": "8px"}),
             ])
@@ -129,42 +127,70 @@ uploadSection = dbc.Card(
 declineCurveAnalysis = dbc.Card(
     dbc.CardBody([
 
-        dcc.RadioItems(
-            id="dca-model-selector",
-            options=[
-                {"label": "Hyperbolic", "value": "hyperbolic"},
-                {"label": "Exponential", "value": "exponential"},
-                {"label": "Harmonic", "value": "harmonic"},
-            ],
-            value="hyperbolic",
-            labelStyle={"display": "inline-block", "marginRight": "15px"},
-            inline=True
-        ),
+        # --- Title ---
+        html.H5("Decline Curve Analysis", className="card-title mb-3"),
 
-        dcc.DatePickerRange(
-            id='dca-date-range',
-            min_date_allowed=date(2000, 1, 1),
-            max_date_allowed=date(2100, 1, 1),
-            start_date=date(2010, 1, 1),  # مقدار نمونه، بعداً می‌تونی داینامیکش کنی از روی دیتا
-            end_date=date(2020, 1, 1),
-            display_format='YYYY-MM-DD',
-        ),
+        # --- Model Selector ---
+        dbc.Row([
+            dbc.Col(html.Label("Select DCA Model(s):"), width="auto"),
+            dbc.Col(
+                dcc.Checklist(
+                    id="dca-model-selector",
+                    options=[
+                        {"label": "Hyperbolic", "value": "hyperbolic"},
+                        {"label": "Exponential", "value": "exponential"},
+                        {"label": "Harmonic", "value": "harmonic"},
+                    ],
+                    value=["hyperbolic"],  # مقدار اولیه، می‌تونی چندتا بذاری
+                    inline=True,
+                    labelStyle={"marginRight": "15px"}
+                ),
+                width="auto"
+            )
+        ], className="mb-3 align-items-center"),
 
-        dcc.Dropdown(id="dca-column-dropdown", placeholder="Select rate column..."),
-        html.Br(),
-        html.Button("Run DCA", id="run-dca-btn", n_clicks=0, className="btn btn-primary"),
-        html.Br(), html.Br(),
 
-        dcc.Graph(id="dca-graph"),
+        # --- Date Picker & Column Selector ---
+        dbc.Row([
+            dbc.Col([
+                html.Label("Date Range:"),
+                dcc.DatePickerRange(
+                    id='dca-date-range',
+                    min_date_allowed=date(2000, 1, 1),
+                    max_date_allowed=date(2100, 1, 1),
+                    start_date=date(2000, 1, 1),
+                    end_date=date(2020, 1, 1),
+                    display_format='YYYY-MM-DD',
+                )
+            ], width=5),
 
-        html.Div(id="dca-results"),
+            dbc.Col([
+                html.Label("Select Column:"),
+                dcc.Dropdown(
+                    id="dca-column-dropdown",
+                    placeholder="Select rate column..."
+                )
+            ], width=7),
+        ], className="mb-3"),
 
-        dcc.Store(id="dataframevalue"),
-        dcc.Store(id="dca-params-store"),
-        dcc.Store(id="dca-time-array"),
 
-        html.Div(id="debug-params"),
-        html.Div(id="debug-time")
+        # --- Run Button ---
+        dbc.Row([
+            dbc.Col(
+                dbc.Button("Run DCA", id="run-dca-btn", color="primary", className="w-100"),
+                width=3
+            )
+        ], justify="start", className="mb-4"),
+
+        # --- Graph ---
+        dcc.Graph(id="dca-graph", style={"height": "400px"}),
+
+        # --- Results Section ---
+        html.Div(id="dca-results", className="mt-3"),
+
+        # --- Debug (optional, can be hidden later) ---
+        html.Div(id="debug-params", style={"fontSize": "12px", "color": "#6c757d"}),
+        html.Div(id="debug-time", style={"fontSize": "12px", "color": "#6c757d"})
     ]),
     className="mt-3 border border-primary-subtle",
     style={"backgroundColor": "#ffffff", "padding": "10px", "borderRadius": "6px"}
@@ -296,83 +322,6 @@ controls22 = dbc.Card(
     className="shadow-sm"
 )
 
-# controls3 = dbc.Card(
-#     [
-#         html.H4([
-#             html.I(className="bi bi-graph-up-arrow me-2"),
-#             "Probabilistic Analysis"
-#         ]),
-#         html.H6("Economic limit production rate (qa):", className="fw-bold"),
-#         dbc.Input(
-#             type="number", id='inputqa', value=10000,
-#             placeholder="Enter economic limit (qa)",
-#             style={"marginBottom": "10px"}
-#         ),
-
-#         html.Div(id='textarea-Np-output', style={'whiteSpace': 'pre-line'}),
-
-#         dbc.Row([
-#             # Graph
-#             dbc.Col(dcc.Graph(id="uncertainty-graph"), md=7),
-
-#             # Distribution Inputs
-#             dbc.Col([
-#                 html.H6("Probability Distribution", className="fw-bold"),
-#                 dcc.RadioItems(
-#                     id='prob-dist-button',
-#                     options=[
-#                         {"label": "Triangular", "value": "Triangular"},
-#                         {"label": "Normal", "value": "Normal"},
-#                     ],
-#                     value='Triangular',
-#                     labelStyle={"display": "block", "marginBottom": "5px"},
-#                     style={"marginBottom": "15px"}
-#                 ),
-
-#                 html.Div([
-#                     html.H6("Triangular Parameters", className="fw-bold"),
-#                     dbc.InputGroup([
-#                         dbc.InputGroupText("Left %"),
-#                         dbc.Input(
-#                             id="Trinangular-left",
-#                             placeholder="e.g. 20", value=20,
-#                             min=0, max=100, type="number"
-#                         )
-#                     ], className="mb-2"),
-
-#                     dbc.InputGroup([
-#                         dbc.InputGroupText("Right %"),
-#                         dbc.Input(
-#                             id="Trinangular-right",
-#                             placeholder="e.g. 20", value=20,
-#                             min=0, max=100, type="number"
-#                         )
-#                     ], className="mb-3"),
-#                 ]),
-
-#                 html.Div([
-#                     html.H6("Normal Parameters", className="fw-bold"),
-#                     dbc.InputGroup([
-#                         dbc.InputGroupText("STD % of mean"),
-#                         dbc.Input(
-#                             id="Normal-std",
-#                             placeholder="e.g. 30", value=30,
-#                             min=0, max=100, type="number"
-#                         )
-#                     ])
-#                 ])
-#             ], md=5)
-#         ])
-#     ],
-#     body=True,
-#     color="#F9F9F9",
-#     className="shadow-sm"
-# )
-
-#------------------------------------------------------------------------------
-#------------------------------------------------------------------------------
-#---------------------LAYOUT---------------------------------------------------
-#------------------------------------------------------------------------------
 app.layout = html.Div(
     [
         dbc.Container(
@@ -410,23 +359,6 @@ app.layout = html.Div(
                                     ],
                                     className="mb-4"
                                 ),
-
-                                html.Div(id='div1', className="mb-4"),
-
-                                # dbc.Card(
-                                #     [
-                                #         dbc.CardHeader("Peak Detection & Forecasting"),
-                                #         dbc.CardBody(
-                                #             dbc.Row(
-                                #                 [
-                                #                     dbc.Col(controls22, md=6),
-                                #                     dbc.Col(controls3, md=6),
-                                #                 ]
-                                #             )
-                                #         ),
-                                #     ],
-                                #     className="mb-4"
-                                # ),
 
                                 html.Div(id='div2', className="mb-4"),
 
@@ -495,7 +427,7 @@ def style_export_button(data):
     State(component_id='upload-data', component_property='filename'),
     State(component_id='upload-data', component_property='last_modified')],
     prevent_initial_call=True)
-def update_output(icontents, ifilename, date):
+def update_checklist(icontents, ifilename, date):
     # ساخت دیتافریم خالی با ایندکس Date
     dff = pd.DataFrame(columns=["Date"]).set_index("Date")
     dffPeaks = pd.DataFrame(columns=["Date"]).set_index("Date")   
@@ -529,7 +461,12 @@ def update_output(icontents, ifilename, date):
         dffPeaks = dffPeaks.reset_index()
 
     # آماده‌سازی گزینه‌ها برای چک‌لیست
-    checklist_options = [{"label": f"{col}", "value": col} for col in dff.columns.to_list()]
+    # حذف ستون تاریخ واقعی
+    checklist_options = [
+        {"label": col, "value": col}
+        for col in dff.columns.to_list()
+        if col != dateCol
+    ]
 
     # بازگرداندن گزینه‌ها و داده‌ها
     return [
@@ -645,6 +582,7 @@ def update_graph(selected_columns, df_json, peaks_json, show_peaks, start_date, 
     )
 
     return fig
+
 #------------------------------------------------------------------------------
 @app.callback([
      Output('selected-data-printout', 'children'),
@@ -871,14 +809,14 @@ def harmonic_decline(t, qi, Di):
      Output("dca-time-array", "data")],
     Input("run-dca-btn", "n_clicks"),
     State("dca-column-dropdown", "value"),
-    State("dca-model-selector", "value"),
+    State("dca-model-selector", "value"),   # این الان لیست هست
     State("dataframevalue", "data"),
     State("dca-date-range", "start_date"),
     State("dca-date-range", "end_date"),
     prevent_initial_call=True
 )
-def run_dca_model(n_clicks, column, model_type, df_json, start_date, end_date):
-    if not column or not df_json:
+def run_dca_model(n_clicks, column, model_types, df_json, start_date, end_date):
+    if not column or not df_json or not model_types:
         raise exceptions.PreventUpdate
 
     try:
@@ -892,95 +830,68 @@ def run_dca_model(n_clicks, column, model_type, df_json, start_date, end_date):
             df = df[(df["Date"] >= pd.to_datetime(start_date)) & (df["Date"] <= pd.to_datetime(end_date))]
 
         if df.empty:
-            return go.Figure(), html.Div("❌ No data in selected date range.")
+            return go.Figure(), html.Div("❌ No data in selected date range."), {}, []
 
         # calculate time in days from the first date
         t = (df["Date"] - df["Date"].iloc[0]).dt.days.values
         q = df[column].values
 
-        if model_type == "exponential":
-            func = exponential_decline
-            p0 = [q[0], 0.01]
-        elif model_type == "harmonic":
-            func = harmonic_decline
-            p0 = [q[0], 0.01]
-        elif model_type == "hyperbolic":
-            func = hyperbolic_decline
-            p0 = [q[0], 0.01, 0.5]
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual Data"))
 
-        try:
-            start_time = time.time()
-            params, _ = curve_fit(func, t, q, p0=p0, maxfev=10000)
-            fit_time = time.time() - start_time
+        results = []
+        params_store = {}
 
-            q_fit = func(t, *params)
-
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual Data"))
-            fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name=f"{model_type.title()} Fit"))
-
-            fig.update_layout(
-                title=f"{model_type.title()} Decline Curve - {column}",
-                xaxis_title="Date",
-                yaxis_title="Rate",
-                template="plotly_white"
-            )
-
-            result_text = f"<b>{model_type.title()} Decline Parameters:</b><br>"
-            if model_type == "hyperbolic":
-                qi, Di, b = params
-                params_dict = {"qi": qi, "Di": Di, "b": b}
-                result_text += f"🔹 qi = {qi:.2f}<br>🔹 Di = {Di:.4f} /day<br>🔹 b = {b:.2f}<br>"
+        for model_type in model_types:
+            if model_type == "exponential":
+                func = exponential_decline
+                p0 = [q[0], 0.01]
+            elif model_type == "harmonic":
+                func = harmonic_decline
+                p0 = [q[0], 0.01]
+            elif model_type == "hyperbolic":
+                func = hyperbolic_decline
+                p0 = [q[0], 0.01, 0.5]
             else:
-                qi, Di = params
-                params_dict = {"qi": qi, "Di": Di, "b": None}
-                result_text += f"🔹 qi = {qi:.2f}<br>🔹 Di = {Di:.4f} /day<br>"
+                continue
 
-            result_text += f"🔸 Fit Range: {start_date} to {end_date}<br>"
-            # result_text += f"<br>⏱️ Fit Time: {fit_time:.2f} seconds"
+            try:
+                start_time = time.time()
+                params, _ = curve_fit(func, t, q, p0=p0, maxfev=10000)
+                fit_time = time.time() - start_time
 
-            return fig, html.Div([dcc.Markdown(result_text, dangerously_allow_html=True)]), {
-                "qi": float(qi),
-                "Di": float(Di),
-                "b": float(b) if model_type == "hyperbolic" else None
-            }, t.tolist()
-        
-        except Exception as e:
-            return go.Figure(), html.Div(f"❌ Error fitting DCA: {e}")
+                q_fit = func(t, *params)
+                fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name=f"{model_type.title()} Fit"))
 
+                result_text = f"### {model_type.title()} Decline Parameters\n"
+                if model_type == "hyperbolic":
+                    qi, Di, b = params
+                    params_dict = {"qi": qi, "Di": Di, "b": b}
+                    result_text += f"- **qi** = {qi:.2f}\n- **Di** = {Di:.4f} /day\n- **b** = {b:.2f}\n"
+                else:
+                    qi, Di = params
+                    params_dict = {"qi": qi, "Di": Di, "b": None}
+                    result_text += f"- **qi** = {qi:.2f}\n- **Di** = {Di:.4f} /day\n"
 
-        # if model_type == "hyperbolic":
-        #     initial_guess = [q[0], 0.01, 0.5]
-        #     params, _ = curve_fit(hyperbolic_decline, t, q, p0=initial_guess, maxfev=10000)
-        #     qi, Di, b = params
-        #     q_fit = hyperbolic_decline(t, qi, Di, b)
+                result_text += f"- **Fit Range:** {start_date} to {end_date}\n"
+                results.append(dcc.Markdown(result_text))
 
-        #     fig = go.Figure()
-        #     fig.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual Data"))
-        #     fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name="Hyperbolic Fit"))
+                params_store[model_type] = {k: float(v) if v is not None else None for k, v in params_dict.items()}
 
-        #     fig.update_layout(
-        #         title=f"Hyperbolic Decline Fit - {column}",
-        #         xaxis_title="Date",
-        #         yaxis_title="Rate",
-        #         template="plotly_white"
-        #     )
+            except Exception as e:
+                results.append(html.Div(f"❌ Error fitting {model_type}: {e}"))
 
-        #     result_text = f"""
-        #     📈 **Hyperbolic Decline Parameters**  
-        #     🔹 qi = {qi:.2f}  
-        #     🔹 Di = {Di:.4f} per day  
-        #     🔹 b = {b:.2f}  
-        #     🔸 Fit Range: {start_date} to {end_date}
-        #     """
+        fig.update_layout(
+            title=f"DCA Fit - {column}",
+            xaxis_title="Date",
+            yaxis_title="Rate",
+            template="plotly_white"
+        )
 
-        #     return fig, dcc.Markdown(result_text)
-
-        # else:
-        #     return go.Figure(), html.Div("❌ Selected model not implemented.")
+        return fig, html.Div(results), params_store, t.tolist()
 
     except Exception as e:
-        return go.Figure(), html.Div(f"❌ Error fitting model: {e}")
+        return go.Figure(), html.Div(f"❌ Error fitting model: {e}"), {}, []
     
 @app.callback(
     [Output("debug-params", "children"),
@@ -1043,14 +954,12 @@ def create_monte_carlo_figure(results):
         template="plotly_white",
         height=400
     )
-
     return fig
 
 @app.callback(
     Output("monte-carlo-graph", "figure"),
     Input("run-monte-carlo-btn", "n_clicks"),
     State("dca-params-store", "data"),
-    State("dca-model-selector", "value"),
     State("dca-time-array", "data"),
     prevent_initial_call=True
 )
@@ -1109,5 +1018,4 @@ def run_monte_carlo(n_clicks, params, model_type, t_array):
     return fig
 
 if __name__ == "__main__":
-    # app.run_server(debug=True, port=8888)
-    app.run_server()
+    app.run()
