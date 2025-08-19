@@ -140,14 +140,32 @@ declineCurveAnalysis = dbc.Card(
                         {"label": "Hyperbolic", "value": "hyperbolic"},
                         {"label": "Exponential", "value": "exponential"},
                         {"label": "Harmonic", "value": "harmonic"},
+                        {"label": "Duong", "value": "duong"},
+                        {"label": "Arps", "value": "arps"},
+                        {"label": "Show Total", "value": "total"},
                     ],
-                    value=["hyperbolic"],  # مقدار اولیه، می‌تونی چندتا بذاری
+                    value=["hyperbolic"],
                     inline=True,
                     labelStyle={"marginRight": "15px"}
                 ),
                 width="auto"
             )
         ], className="mb-3 align-items-center"),
+
+        dbc.Row([
+            dbc.Col([
+                html.Label("Select Row Count:"),
+                dcc.Slider(
+                    id="dca-row-slider",
+                    min=10,              # کمترین تعداد ردیف
+                    max=5000,             # بیشترین تعداد ردیف
+                    step=10,             # پله حرکت
+                    value=100,           # مقدار پیش‌فرض
+                    marks={i: str(i) for i in range(100, 5001, 1000)},  # نمایش اعداد
+                    tooltip={"placement": "bottom", "always_visible": True}
+                )
+            ], width=12),
+        ], className="mb-3"),
 
 
         # --- Date Picker & Column Selector ---
@@ -188,9 +206,6 @@ declineCurveAnalysis = dbc.Card(
         # --- Results Section ---
         html.Div(id="dca-results", className="mt-3"),
 
-        # --- Debug (optional, can be hidden later) ---
-        html.Div(id="debug-params", style={"fontSize": "12px", "color": "#6c757d"}),
-        html.Div(id="debug-time", style={"fontSize": "12px", "color": "#6c757d"})
     ]),
     className="mt-3 border border-primary-subtle",
     style={"backgroundColor": "#ffffff", "padding": "10px", "borderRadius": "6px"}
@@ -802,6 +817,22 @@ def exponential_decline(t, qi, Di):
 def harmonic_decline(t, qi, Di):
     return qi / (1 + Di * t)
 
+def arps_decline(t, qi, Di, b):
+    """
+    Arps decline curve model
+    q(t) = qi / (1 + b * Di * t)^(1/b)
+    """
+    return qi / np.power(1 + b * Di * t, 1 / b)
+
+
+def duong_decline(t, qi, a, m):
+    """
+    Duong decline curve model
+    q(t) = qi / (t+1)^m * exp(-a * (t))
+    """
+    t = np.array(t, dtype=float)
+    return qi / np.power(t + 1, m) * np.exp(-a * t)
+
 @app.callback(
     [Output("dca-graph", "figure"),
      Output("dca-results", "children"),
@@ -809,25 +840,31 @@ def harmonic_decline(t, qi, Di):
      Output("dca-time-array", "data")],
     Input("run-dca-btn", "n_clicks"),
     State("dca-column-dropdown", "value"),
-    State("dca-model-selector", "value"),   # این الان لیست هست
+    State("dca-model-selector", "value"),
+    State("dca-row-slider", "value"),
     State("dataframevalue", "data"),
     State("dca-date-range", "start_date"),
     State("dca-date-range", "end_date"),
     prevent_initial_call=True
 )
-def run_dca_model(n_clicks, column, model_types, df_json, start_date, end_date):
+def run_dca_model(n_clicks, column, model_types, row_limit, df_json, start_date, end_date):
     if not column or not df_json or not model_types:
         raise exceptions.PreventUpdate
 
     try:
         df = pd.read_json(df_json, orient='split')
-        df["Date"] = pd.to_datetime(df["Date"])
+        df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)
         df = df.dropna(subset=[column])
         df = df.sort_values("Date")
 
-        # fit by date range if specified
         if start_date and end_date:
-            df = df[(df["Date"] >= pd.to_datetime(start_date)) & (df["Date"] <= pd.to_datetime(end_date))]
+            start_date = pd.to_datetime(start_date)
+            end_date = pd.to_datetime(end_date)
+
+            df = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
+
+        if row_limit:
+            df = df.head(row_limit)
 
         if df.empty:
             return go.Figure(), html.Div("❌ No data in selected date range."), {}, []
@@ -839,8 +876,9 @@ def run_dca_model(n_clicks, column, model_types, df_json, start_date, end_date):
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual Data"))
 
-        results = []
+        results_blocks = []
         params_store = {}
+        total_curve = np.zeros_like(q, dtype=float)
 
         for model_type in model_types:
             if model_type == "exponential":
@@ -852,43 +890,65 @@ def run_dca_model(n_clicks, column, model_types, df_json, start_date, end_date):
             elif model_type == "hyperbolic":
                 func = hyperbolic_decline
                 p0 = [q[0], 0.01, 0.5]
+            elif model_type == "duong":
+                func = duong_decline
+                p0 = [q[0], 0.001, 0.5]
+
+            elif model_type == "arps":
+                func = arps_decline
+                p0 = [q[0], 0.01, 0.5]
+            elif model_type == "total":
+                continue
             else:
                 continue
 
             try:
-                start_time = time.time()
                 params, _ = curve_fit(func, t, q, p0=p0, maxfev=10000)
-                fit_time = time.time() - start_time
-
                 q_fit = func(t, *params)
-                fig.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name=f"{model_type.title()} Fit"))
 
+                # جمع برای "total"
+                total_curve += q_fit
+
+                # اضافه به گراف
+                fig.add_trace(go.Scatter(
+                    x=df["Date"], y=q_fit, mode="lines",
+                    name=f"{model_type.title()} Fit"
+                ))
+
+                # ساختن متن نتایج
                 result_text = f"### {model_type.title()} Decline Parameters\n"
                 if model_type == "hyperbolic":
                     qi, Di, b = params
-                    params_dict = {"qi": qi, "Di": Di, "b": b}
-                    result_text += f"- **qi** = {qi:.2f}\n- **Di** = {Di:.4f} /day\n- **b** = {b:.2f}\n"
+                    params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": float(b)}
+                    result_text += f"- qi = {qi:.2f}\n- Di = {Di:.4f} /day\n- b = {b:.2f}\n"
                 else:
-                    qi, Di = params
-                    params_dict = {"qi": qi, "Di": Di, "b": None}
-                    result_text += f"- **qi** = {qi:.2f}\n- **Di** = {Di:.4f} /day\n"
+                    qi, Di = params[:2]
+                    params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": None}
+                    result_text += f"- qi = {qi:.2f}\n- Di = {Di:.4f} /day\n"
 
-                result_text += f"- **Fit Range:** {start_date} to {end_date}\n"
-                results.append(dcc.Markdown(result_text))
-
-                params_store[model_type] = {k: float(v) if v is not None else None for k, v in params_dict.items()}
+                results_blocks.append(dcc.Markdown(result_text))
 
             except Exception as e:
-                results.append(html.Div(f"❌ Error fitting {model_type}: {e}"))
+                results_blocks.append(html.Div(f"❌ Error fitting {model_type}: {e}"))
+
+        # اگر total انتخاب شده بود
+        if "total" in model_types:
+            fig.add_trace(go.Scatter(
+                x=df["Date"], y=total_curve, mode="lines", name="Total Fit", line=dict(dash="dot", width=3)
+            ))
+            results_blocks.append(dcc.Markdown("### Total Curve\n✅ Sum of all selected models"))
 
         fig.update_layout(
-            title=f"DCA Fit - {column}",
+            title=f"Decline Curve Analysis - {column}",
             xaxis_title="Date",
             yaxis_title="Rate",
             template="plotly_white"
         )
+        
+        print("Start:", start_date, "End:", end_date)
+        print("Remaining rows:", len(df))
 
-        return fig, html.Div(results), params_store, t.tolist()
+        return fig, results_blocks, params_store, t.tolist()
 
     except Exception as e:
         return go.Figure(), html.Div(f"❌ Error fitting model: {e}"), {}, []
