@@ -216,6 +216,11 @@ monteCarloSimulation = dbc.Card(
 
         html.H5("Monte Carlo Simulation", className="card-title"),
 
+        dbc.Col([
+            dbc.Label("Economic Limit (q min)"),
+            dcc.Input(id="mc-q-min", type="number", value=1.0, step=0.1)
+        ], md=4),
+
         dbc.Row([
 
             dbc.Col([
@@ -875,26 +880,24 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json, start_date,
         raise exceptions.PreventUpdate
 
     try:
-        df = pd.read_json(df_json, orient='split')
+        df = pd.read_json(df_json, orient="split")
         df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)
-        df = df.dropna(subset=[column])
-        df = df.sort_values("Date")
+        df = df.dropna(subset=[column]).sort_values("Date")
 
         if start_date and end_date:
-            start_date = pd.to_datetime(start_date)
-            end_date = pd.to_datetime(end_date)
-
-            df = df[(df["Date"] >= start_date) & (df["Date"] <= end_date)]
+            df = df[(df["Date"] >= pd.to_datetime(start_date)) & (df["Date"] <= pd.to_datetime(end_date))]
 
         if row_limit:
             df = df.head(row_limit)
 
         if df.empty:
-            return go.Figure(), html.Div("❌ No data in selected date range."), {}, []
+            return go.Figure(), html.Div("❌ No data in selected range."), {}, []
 
-        # calculate time in days from the first date
         t = (df["Date"] - df["Date"].iloc[0]).dt.days.values
         q = df[column].values
+
+        dt = np.diff(t, prepend=t[0])
+        dt[dt <= 0] = 1.0
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual Data"))
@@ -903,64 +906,62 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json, start_date,
         params_store = {}
         total_curve = np.zeros_like(q, dtype=float)
 
+        
         for model_type in model_types:
             if model_type == "exponential":
-                func = exponential_decline
-                p0 = [q[0], 0.01]
+                func, p0 = exponential_decline, [q[0], 0.01]
             elif model_type == "harmonic":
-                func = harmonic_decline
-                p0 = [q[0], 0.01]
+                func, p0 = harmonic_decline, [q[0], 0.01]
             elif model_type == "hyperbolic":
-                func = hyperbolic_decline
-                p0 = [q[0], 0.01, 0.5]
+                func, p0 = hyperbolic_decline, [q[0], 0.01, 0.5]
             elif model_type == "duong":
-                func = duong_decline
-                p0 = [q[0], 0.001, 0.5]
-
+                func, p0 = duong_decline, [q[0], 0.001, 0.5]
             elif model_type == "arps":
-                func = arps_decline
-                p0 = [q[0], 0.01, 0.5]
+                func, p0 = arps_decline, [q[0], 0.01, 0.5]
             elif model_type == "total":
                 continue
             else:
                 continue
 
-            try:
-                params, _ = curve_fit(func, t, q, p0=p0, maxfev=10000)
-                q_fit = func(t, *params)
+            params, _ = curve_fit(func, t, q, p0=p0, maxfev=10000)
+            q_fit = func(t, *params)
+            Q_cum = np.cumsum(q_fit * dt)
 
-                total_curve += q_fit
+            total_curve += q_fit
 
-                fig.add_trace(go.Scatter(
-                    x=df["Date"], y=q_fit, mode="lines",
-                    name=f"{model_type.title()} Fit"
-                ))
+            fig.add_trace(go.Scatter(
+                x=df["Date"], y=q_fit, mode="lines", name=f"{model_type.title()} Rate"
+            ))
 
-                result_text = f"### {model_type.title()} Decline Parameters\n"
-                if model_type == "hyperbolic":
-                    qi, Di, b = params
-                    params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": float(b)}
-                    result_text += f"- qi = {qi:.2f}\n- Di = {Di:.4f} /day\n- b = {b:.2f}\n"
-                else:
-                    qi, Di = params[:2]
-                    params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": None}
-                    result_text += f"- qi = {qi:.2f}\n- Di = {Di:.4f} /day\n"
+            fig.add_trace(go.Scatter(
+                x=df["Date"], y=Q_cum, mode="lines", name=f"{model_type.title()} Cumulative",
+                yaxis="y2", line=dict(dash="dot")
+            ))
 
-                results_blocks.append(dcc.Markdown(result_text))
+            if model_type == "hyperbolic":
+                qi, Di, b = params
+                params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": float(b), "Qcumulative": Q_cum.tolist()}
+                result = f"### {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- b = {b:.2f}\n- Q = {Q_cum[-1]:.2f}"
+            else:
+                qi, Di = params[:2]
+                params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": None, "Qcumulative": Q_cum.tolist()}
+                result = f"### {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- Q = {Q_cum[-1]:.2f}"
 
-            except Exception as e:
-                results_blocks.append(html.Div(f"❌ Error fitting {model_type}: {e}"))
+            results_blocks.append(dcc.Markdown(result))
+
 
         if "total" in model_types:
             fig.add_trace(go.Scatter(
-                x=df["Date"], y=total_curve, mode="lines", name="Total Fit", line=dict(dash="dot", width=3)
+                x=df["Date"], y=total_curve, mode="lines", name="Total Rate",
+                line=dict(dash="dot", width=3)
             ))
-            results_blocks.append(dcc.Markdown("### Total Curve\n✅ Sum of all selected models"))
+            results_blocks.append(dcc.Markdown("### Total\nSum of all models"))
 
         fig.update_layout(
             title=f"Decline Curve Analysis - {column}",
             xaxis_title="Date",
             yaxis_title="Rate",
+            yaxis2=dict(title="Cumulative", overlaying="y", side="right", showgrid=False),
             template="plotly_white"
         )
         
@@ -970,7 +971,7 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json, start_date,
         return fig, results_blocks, params_store, t.tolist()
 
     except Exception as e:
-        return go.Figure(), html.Div(f"❌ Error fitting model: {e}"), {}, []
+        return go.Figure(), html.Div(f"❌ Error: {e}"), {}, []
     
 @app.callback(
     [Output("debug-params", "children"),
@@ -1023,9 +1024,10 @@ def create_monte_carlo_figure(results):
     State("dca-time-array", "data"),
     State("mc-iterations", "value"),
     State("mc-uncertainty", "value"),
+    State("mc-q-min", "value"),
     prevent_initial_call=True
 )
-def run_monte_carlo(n_clicks, params_store, model_types, t_array, n_simulations, uncertainty_scale):
+def run_monte_carlo(n_clicks, params_store, model_types, t_array, n_simulations, uncertainty_scale, q_min):
 
     if not params_store or not t_array or not model_types:
         raise exceptions.PreventUpdate
@@ -1033,17 +1035,16 @@ def run_monte_carlo(n_clicks, params_store, model_types, t_array, n_simulations,
     import numpy as np
     import plotly.graph_objects as go
 
-    # pick first non-total model
     model_type = next((m for m in model_types if m != "total"), None)
     if model_type not in params_store:
         raise exceptions.PreventUpdate
 
     params = params_store[model_type]
-
     t = np.array(t_array)
 
     n_simulations = int(n_simulations or 500)
     uncertainty_scale = float(uncertainty_scale or 1.0)
+    q_min = float(q_min or 0.0)
 
     qi_mu = params["qi"]
     Di_mu = params["Di"]
@@ -1053,7 +1054,11 @@ def run_monte_carlo(n_clicks, params_store, model_types, t_array, n_simulations,
     Di_sigma = 0.10 * Di_mu * uncertainty_scale
     b_sigma  = 0.15 * b_mu  * uncertainty_scale if b_mu is not None else None
 
+    eur_list = []
     simulations = []
+
+    dt = np.diff(t, prepend=t[0])
+    dt[dt <= 0] = 1.0
 
     for _ in range(n_simulations):
 
@@ -1077,9 +1082,23 @@ def run_monte_carlo(n_clicks, params_store, model_types, t_array, n_simulations,
         elif model_type == "arps":
             q_sim = qi / np.power(1 + b * Di * t, 1 / b)
         else:
-            raise exceptions.PreventUpdate
+            continue
+
+        # economic cutoff
+        mask = q_sim >= q_min
+        q_cut = q_sim[mask]
+        dt_cut = dt[mask]
+
+        Q_cum = np.sum(q_cut * dt_cut)
+        eur_list.append(Q_cum)
 
         simulations.append(q_sim)
+
+    eur_array = np.array(eur_list)
+
+    p10 = np.percentile(eur_array, 10)
+    p50 = np.percentile(eur_array, 50)
+    p90 = np.percentile(eur_array, 90)
 
     fig = go.Figure()
 
@@ -1089,12 +1108,13 @@ def run_monte_carlo(n_clicks, params_store, model_types, t_array, n_simulations,
             y=sim,
             mode="lines",
             line=dict(width=1),
-            opacity=0.12,
+            opacity=0.1,
             showlegend=False
         ))
 
     fig.update_layout(
-        title=f"Monte Carlo Simulation ({model_type.title()})",
+        title=f"Monte Carlo Simulation ({model_type.title()})<br>"
+              f"P10 EUR={p10:.1f}, P50 EUR={p50:.1f}, P90 EUR={p90:.1f}",
         xaxis_title="Time (days)",
         yaxis_title="Rate",
         template="plotly_white"
