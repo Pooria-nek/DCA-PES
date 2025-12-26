@@ -102,7 +102,7 @@ uploadSection = dbc.Card(
             dbc.Col([
                 dbc.Checkbox(
                     id="show-peaks-toggle",
-                    checked=True,
+                    value=True,
                 ),
                 html.Label("show peaks", htmlFor="show-peaks-toggle", style={"marginLeft": "8px"}),
             ])
@@ -157,11 +157,11 @@ declineCurveAnalysis = dbc.Card(
                 html.Label("Select Row Count:"),
                 dcc.Slider(
                     id="dca-row-slider",
-                    min=10,              # کمترین تعداد ردیف
-                    max=5000,             # بیشترین تعداد ردیف
-                    step=10,             # پله حرکت
-                    value=100,           # مقدار پیش‌فرض
-                    marks={i: str(i) for i in range(100, 5001, 1000)},  # نمایش اعداد
+                    min=10,
+                    max=5000, 
+                    step=10,      
+                    value=100,     
+                    marks={i: str(i) for i in range(100, 5001, 1000)},  
                     tooltip={"placement": "bottom", "always_visible": True}
                 )
             ], width=12),
@@ -213,34 +213,67 @@ declineCurveAnalysis = dbc.Card(
 
 monteCarloSimulation = dbc.Card(
     dbc.CardBody([
+
         html.H5("Monte Carlo Simulation", className="card-title"),
 
         dbc.Row([
+
             dbc.Col([
                 dbc.Label("Iterations"),
-                dcc.Input(id="monte-carlo-n", type="number", value=200)
-            ], md=4),
-            dbc.Col([
-                dbc.Label("Uncertainty (%)"),
-                dcc.Input(id="monte-carlo-std", type="number", value=0.1)
-            ], md=4),
-        ]),
+                dcc.Input(
+                    id="mc-iterations",
+                    type="number",
+                    value=500,
+                    min=100,
+                    step=100,
+                    debounce=True,
+                    className="form-control"
+                )
+            ], md=6),
 
-        html.Br(),
+            dbc.Col([
+                dbc.Label("Uncertainty Scale"),
+                dcc.Slider(
+                    id="mc-uncertainty",
+                    min=0.5,
+                    max=2.0,
+                    step=0.1,
+                    value=1.0,
+                    marks={
+                        0.5: "Low",
+                        1.0: "Base",
+                        1.5: "High",
+                        2.0: "Stress"
+                    },
+                    tooltip={"placement": "bottom", "always_visible": True}
+                )
+            ], md=6),
+
+        ], className="mb-3"),
+
+        html.Div("Uncertainty scale multiplies the base parameter standard deviations.", 
+                 className="text-muted small mb-2"),
 
         dcc.Store(id="dca-params-store"),
         dcc.Store(id="dca-time-array"),
-        html.Button("Run Monte Carlo", id="run-monte-carlo-btn", n_clicks=0),
+
+        dbc.Button(
+            "Run Monte Carlo",
+            id="run-monte-carlo-btn",
+            n_clicks=0,
+            color="success",
+            className="mb-3"
+        ),
+
         dcc.Graph(id="monte-carlo-graph")
 
-        # html.Button("Run Simulation", id="run-monte-carlo-btn"),
-        # html.Br(), html.Br(),
-
-        # dcc.Graph(id="monte-carlo-graph"),
-        # html.Div(id="mc-stats")
     ]),
     className="mt-3 border border-success-subtle",
-    style={"backgroundColor": "#f8f9fa", "padding": "10px", "borderRadius": "6px"}
+    style={
+        "backgroundColor": "#f8f9fa",
+        "padding": "12px",
+        "borderRadius": "8px"
+    }
 )
 
 controls22 = dbc.Card(
@@ -962,23 +995,23 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json, start_date,
 def debug_outputs(params, time_array):
     return str(params), str(time_array)
     
-def run_monte_carlo(qi, Di, b, n_iter=200, std_dev=0.1, t_max=60):
+# def run_monte_carlo(qi, Di, b, n_iter=200, std_dev=0.1, t_max=60):
 
-    t = np.arange(1, t_max + 1)
+#     t = np.arange(1, t_max + 1)
 
-    results = np.zeros((n_iter, t_max))
+#     results = np.zeros((n_iter, t_max))
 
-    for i in range(n_iter):
-        qi_i = np.random.normal(qi, std_dev * qi)
-        Di_i = np.random.normal(Di, std_dev * Di)
-        b_i = b 
+#     for i in range(n_iter):
+#         qi_i = np.random.normal(qi, std_dev * qi)
+#         Di_i = np.random.normal(Di, std_dev * Di)
+#         b_i = b 
 
-        denom = (1 + b_i * Di_i * t)
-        q_t = qi_i / np.power(denom, 1 / b_i)
+#         denom = (1 + b_i * Di_i * t)
+#         q_t = qi_i / np.power(denom, 1 / b_i)
 
-        results[i, :] = q_t
+#         results[i, :] = q_t
 
-    return results
+#     return results
 
 
 def create_monte_carlo_figure(results):
@@ -1020,30 +1053,52 @@ def create_monte_carlo_figure(results):
     Output("monte-carlo-graph", "figure"),
     Input("run-monte-carlo-btn", "n_clicks"),
     State("dca-params-store", "data"),
+    State("dca-model-selector", "value"),
     State("dca-time-array", "data"),
+    State("mc-iterations", "value"),
+    State("mc-uncertainty", "value"),
     prevent_initial_call=True
 )
-def run_monte_carlo(n_clicks, params, model_type, t_array):
-    if not params or not t_array:
+def run_monte_carlo(n_clicks, params_store, model_types, t_array, n_simulations, uncertainty_scale):
+
+    if not params_store or not t_array or not model_types:
         raise exceptions.PreventUpdate
 
     import numpy as np
+    import plotly.graph_objects as go
+
+    # pick first non-total model
+    model_type = next((m for m in model_types if m != "total"), None)
+    if model_type not in params_store:
+        raise exceptions.PreventUpdate
+
+    params = params_store[model_type]
 
     t = np.array(t_array)
+
+    n_simulations = int(n_simulations or 500)
+    uncertainty_scale = float(uncertainty_scale or 1.0)
+
+    qi_mu = params["qi"]
+    Di_mu = params["Di"]
+    b_mu  = params.get("b")
+
+    qi_sigma = 0.05 * qi_mu * uncertainty_scale
+    Di_sigma = 0.10 * Di_mu * uncertainty_scale
+    b_sigma  = 0.15 * b_mu  * uncertainty_scale if b_mu is not None else None
+
     simulations = []
 
-    n_simulations = 100  # تعداد دفعات شبیه‌سازی
-
     for _ in range(n_simulations):
-        # نویز تصادفی کوچک روی پارامترها
-        qi_noise = np.random.normal(loc=params["qi"], scale=0.02 * params["qi"])
-        Di_noise = np.random.normal(loc=params["Di"], scale=0.05 * params["Di"])
-        b_noise = np.random.normal(loc=params["b"], scale=0.1 * params["b"]) if params["b"] is not None else None
 
-        # تضمین مثبت بودن پارامترها
-        qi = max(qi_noise, 1e-6)
-        Di = max(Di_noise, 1e-6)
-        b = max(b_noise, 0.01) if b_noise is not None else None
+        qi = np.random.normal(qi_mu, qi_sigma)
+        Di = np.random.normal(Di_mu, Di_sigma)
+        b  = np.random.normal(b_mu, b_sigma) if b_mu is not None else None
+
+        qi = np.clip(qi, 1e-6, None)
+        Di = np.clip(Di, 1e-6, 10.0)
+        if b is not None:
+            b = np.clip(b, 0.05, 2.0)
 
         if model_type == "exponential":
             q_sim = qi * np.exp(-Di * t)
@@ -1051,25 +1106,29 @@ def run_monte_carlo(n_clicks, params, model_type, t_array):
             q_sim = qi / (1 + Di * t)
         elif model_type == "hyperbolic":
             q_sim = qi / np.power(1 + b * Di * t, 1 / b)
+        elif model_type == "duong":
+            q_sim = qi * np.exp(-Di * t) * np.power(t + 1, -b)
+        elif model_type == "arps":
+            q_sim = qi / np.power(1 + b * Di * t, 1 / b)
         else:
-            continue
+            raise exceptions.PreventUpdate
 
         simulations.append(q_sim)
 
     fig = go.Figure()
 
-    for i, sim in enumerate(simulations):
+    for sim in simulations:
         fig.add_trace(go.Scatter(
             x=t,
             y=sim,
             mode="lines",
             line=dict(width=1),
-            opacity=0.2,
+            opacity=0.12,
             showlegend=False
         ))
 
     fig.update_layout(
-        title="🔁 Monte Carlo Simulation of Decline Curve",
+        title=f"Monte Carlo Simulation ({model_type.title()})",
         xaxis_title="Time (days)",
         yaxis_title="Rate",
         template="plotly_white"

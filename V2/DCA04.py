@@ -24,17 +24,6 @@ from scipy.signal import argrelextrema
 #     return df
 
 def removeOutliers(df: pd.DataFrame, fieldName: str, zScoreThreshold: float = 3.0) -> pd.DataFrame:
-    """
-    حذف مقادیر پرت از ستون مشخص‌شده با استفاده از z-score.
-
-    Args:
-        df (pd.DataFrame): دیتافریم ورودی.
-        fieldName (str): نام ستون مورد نظر برای حذف پرت‌ها.
-        zScoreThreshold (float): آستانه Z-Score برای تشخیص پرت‌ها.
-
-    Returns:
-        pd.DataFrame: دیتافریم بدون مقادیر پرت.
-    """
     if df.empty or fieldName not in df.columns:
         return df
 
@@ -55,25 +44,18 @@ def readDataFramefromcsvfile(filename):
     df = pd.read_csv(filename, thousands=',')
     df.columns = ["Date", "OilMonthlyVol", "WaterMonthlyVol", "OilPriceWTI"]
     
-    # جایگزین کردن 0 با NaN
     df.replace(0, np.nan, inplace=True)
-    
-    # حذف کاراکترهای $ و , در OilPriceWTI و تبدیل به float
+
     df['OilPriceWTI'] = df['OilPriceWTI'].replace(r'[\$,]', '', regex=True).astype(float)
         
-    # تبدیل ستون Date به datetime
     df['Date'] = pd.to_datetime(df['Date'])
     
-    # تنظیم ستون Date به عنوان ایندکس
     df.set_index('Date', inplace=True)
 
-    # محاسبه میانگین متحرک 3 دوره‌ای با پنجره مرکزی برای دو ستون مشخص
     df_rol = df[["OilMonthlyVol", "WaterMonthlyVol"]].rolling(window=3, center=True).mean()
     
-    # ریسامپل ماهانه (ابتدای ماه) و محاسبه میانگین
     df = df.resample('MS').mean()
 
-    # ریست ایندکس برای هر دو دیتافریم (اگر نیاز به استفاده دارید)
     df.reset_index(inplace=True)
     df_rol.reset_index(inplace=True)
     
@@ -112,17 +94,6 @@ def plotProductionData(df, plotTitle,dfPeaksW=None,dfPeaksO=None, lw=1,mrk='.'):
 
 #------------------------------------------------------------------------------
 def removeMinima(df: pd.DataFrame, fieldName: str, factor: float) -> pd.DataFrame:
-    """
-    حذف مینیمم‌های محلی (minima) از یک ستون مشخص در دیتافریم، با استفاده از یک آستانه بر اساس مشتق و ضریب.
-
-    Args:
-        df (pd.DataFrame): دیتافریم ورودی.
-        fieldName (str): نام ستونی که می‌خواهیم مینیمم‌هایش را حذف کنیم.
-        factor (float): ضریب برای تنظیم حساسیت حذف مینیمم‌ها.
-
-    Returns:
-        pd.DataFrame: دیتافریم با مینیمم‌های حذف‌شده (به‌صورت NaN).
-    """
     if df.empty or fieldName not in df.columns:
         return df
 
