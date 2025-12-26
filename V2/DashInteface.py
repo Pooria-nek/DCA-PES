@@ -200,8 +200,14 @@ declineCurveAnalysis = dbc.Card(
             )
         ], justify="start", className="mb-4"),
 
+        dbc.Row([
+            dbc.Col(dbc.Switch(id="show-cumulative-toggle", label="Show cumulative on main graph", value=False), md=4),
+            dbc.Col(dbc.Switch(id="show-cumulative-view", label="Show cumulative-only view", value=False), md=4),
+        ]),
+
         # --- Graph ---
         dcc.Graph(id="dca-graph", style={"height": "400px"}),
+        dcc.Graph(id="cumulative-graph"),
 
         # --- Results Section ---
         html.Div(id="dca-results", className="mt-3"),
@@ -863,6 +869,7 @@ def duong_decline(t, qi, a, m):
 
 @app.callback(
     [Output("dca-graph", "figure"),
+     Output("cumulative-graph", "figure"),
      Output("dca-results", "children"),
      Output("dca-params-store", "data"),
      Output("dca-time-array", "data")],
@@ -873,105 +880,110 @@ def duong_decline(t, qi, a, m):
     State("dataframevalue", "data"),
     State("dca-date-range", "start_date"),
     State("dca-date-range", "end_date"),
+    State("show-cumulative-toggle", "value"),
+    State("show-cumulative-view", "value"),
     prevent_initial_call=True
 )
-def run_dca_model(n_clicks, column, model_types, row_limit, df_json, start_date, end_date):
+def run_dca_model(n_clicks, column, model_types, row_limit, df_json,
+                  start_date, end_date, show_cum_on_rate, show_cum_view):
     if not column or not df_json or not model_types:
         raise exceptions.PreventUpdate
 
-    try:
-        df = pd.read_json(df_json, orient="split")
-        df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)
-        df = df.dropna(subset=[column]).sort_values("Date")
+    df = pd.read_json(df_json, orient="split")
+    df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)
+    df = df.dropna(subset=[column]).sort_values("Date")
 
-        if start_date and end_date:
-            df = df[(df["Date"] >= pd.to_datetime(start_date)) & (df["Date"] <= pd.to_datetime(end_date))]
+    if start_date and end_date:
+        df = df[(df["Date"] >= pd.to_datetime(start_date)) & (df["Date"] <= pd.to_datetime(end_date))]
+    if row_limit:
+        df = df.head(row_limit)
+    if df.empty:
+        return go.Figure(), go.Figure(), html.Div("No data"), {}, []
 
-        if row_limit:
-            df = df.head(row_limit)
+    t = (df["Date"] - df["Date"].iloc[0]).dt.days.values
+    q = df[column].values
+    dt = np.diff(t, prepend=t[0])
+    dt[dt <= 0] = 1.0
 
-        if df.empty:
-            return go.Figure(), html.Div("❌ No data in selected range."), {}, []
+    fig_rate = go.Figure()
+    fig_rate.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual"))
 
-        t = (df["Date"] - df["Date"].iloc[0]).dt.days.values
-        q = df[column].values
+    fig_cum = go.Figure()
 
-        dt = np.diff(t, prepend=t[0])
-        dt[dt <= 0] = 1.0
+    results_blocks = []
+    params_store = {}
+    total_curve = np.zeros_like(q)
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual Data"))
+    for model_type in model_types:
+        if model_type == "exponential":
+            func, p0 = exponential_decline, [q[0], 0.01]
+        elif model_type == "harmonic":
+            func, p0 = harmonic_decline, [q[0], 0.01]
+        elif model_type == "hyperbolic":
+            func, p0 = hyperbolic_decline, [q[0], 0.01, 0.5]
+        elif model_type == "duong":
+            func, p0 = duong_decline, [q[0], 0.001, 0.5]
+        elif model_type == "arps":
+            func, p0 = arps_decline, [q[0], 0.01, 0.5]
+        elif model_type == "total":
+            continue
+        else:
+            continue
 
-        results_blocks = []
-        params_store = {}
-        total_curve = np.zeros_like(q, dtype=float)
+        params, _ = curve_fit(func, t, q, p0=p0, maxfev=10000)
+        q_fit = func(t, *params)
+        Q_cum = np.cumsum(q_fit * dt)
 
-        
-        for model_type in model_types:
-            if model_type == "exponential":
-                func, p0 = exponential_decline, [q[0], 0.01]
-            elif model_type == "harmonic":
-                func, p0 = harmonic_decline, [q[0], 0.01]
-            elif model_type == "hyperbolic":
-                func, p0 = hyperbolic_decline, [q[0], 0.01, 0.5]
-            elif model_type == "duong":
-                func, p0 = duong_decline, [q[0], 0.001, 0.5]
-            elif model_type == "arps":
-                func, p0 = arps_decline, [q[0], 0.01, 0.5]
-            elif model_type == "total":
-                continue
-            else:
-                continue
+        total_curve += q_fit
 
-            params, _ = curve_fit(func, t, q, p0=p0, maxfev=10000)
-            q_fit = func(t, *params)
-            Q_cum = np.cumsum(q_fit * dt)
+        fig_rate.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name=f"{model_type.title()} Rate"))
 
-            total_curve += q_fit
-
-            fig.add_trace(go.Scatter(
-                x=df["Date"], y=q_fit, mode="lines", name=f"{model_type.title()} Rate"
-            ))
-
-            fig.add_trace(go.Scatter(
-                x=df["Date"], y=Q_cum, mode="lines", name=f"{model_type.title()} Cumulative",
+        if show_cum_on_rate:
+            fig_rate.add_trace(go.Scatter(
+                x=df["Date"], y=Q_cum, mode="lines", name=f"{model_type.title()} Cum",
                 yaxis="y2", line=dict(dash="dot")
             ))
 
-            if model_type == "hyperbolic":
-                qi, Di, b = params
-                params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": float(b), "Qcumulative": Q_cum.tolist()}
-                result = f"### {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- b = {b:.2f}\n- Q = {Q_cum[-1]:.2f}"
-            else:
-                qi, Di = params[:2]
-                params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": None, "Qcumulative": Q_cum.tolist()}
-                result = f"### {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- Q = {Q_cum[-1]:.2f}"
+        fig_cum.add_trace(go.Scatter(
+            x=df["Date"], y=Q_cum, mode="lines", name=f"{model_type.title()} Cumulative"
+        ))
 
-            results_blocks.append(dcc.Markdown(result))
+        if model_type == "hyperbolic":
+            qi, Di, b = params
+            params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": float(b), "Q": float(Q_cum[-1])}
+            result = f"### {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- b = {b:.2f}\n- EUR = {Q_cum[-1]:.2f}"
+        else:
+            qi, Di = params[:2]
+            params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": None, "Q": float(Q_cum[-1])}
+            result = f"### {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- EUR = {Q_cum[-1]:.2f}"
 
+        results_blocks.append(dcc.Markdown(result))
 
-        if "total" in model_types:
-            fig.add_trace(go.Scatter(
-                x=df["Date"], y=total_curve, mode="lines", name="Total Rate",
-                line=dict(dash="dot", width=3)
-            ))
-            results_blocks.append(dcc.Markdown("### Total\nSum of all models"))
+    if "total" in model_types:
+        fig_rate.add_trace(go.Scatter(
+            x=df["Date"], y=total_curve, mode="lines", name="Total Rate",
+            line=dict(dash="dot", width=3)
+        ))
 
-        fig.update_layout(
-            title=f"Decline Curve Analysis - {column}",
-            xaxis_title="Date",
-            yaxis_title="Rate",
-            yaxis2=dict(title="Cumulative", overlaying="y", side="right", showgrid=False),
-            template="plotly_white"
-        )
-        
-        print("Start:", start_date, "End:", end_date)
-        print("Remaining rows:", len(df))
+    fig_rate.update_layout(
+        title="Rate View",
+        xaxis_title="Date",
+        yaxis_title="Rate",
+        yaxis2=dict(title="Cumulative", overlaying="y", side="right"),
+        template="plotly_white"
+    )
 
-        return fig, results_blocks, params_store, t.tolist()
+    fig_cum.update_layout(
+        title="Cumulative View",
+        xaxis_title="Date",
+        yaxis_title="Cumulative",
+        template="plotly_white"
+    )
 
-    except Exception as e:
-        return go.Figure(), html.Div(f"❌ Error: {e}"), {}, []
+    if not show_cum_view:
+        fig_cum = go.Figure()
+
+    return fig_rate, fig_cum, results_blocks, params_store, t.tolist()
     
 @app.callback(
     [Output("debug-params", "children"),
