@@ -476,7 +476,6 @@ def style_export_button(data):
     State(component_id='upload-data', component_property='last_modified')],
     prevent_initial_call=True)
 def update_checklist(icontents, ifilename, date):
-    # ساخت دیتافریم خالی با ایندکس Date
     dff = pd.DataFrame(columns=["Date"]).set_index("Date")
     dffPeaks = pd.DataFrame(columns=["Date"]).set_index("Date")   
 
@@ -484,39 +483,30 @@ def update_checklist(icontents, ifilename, date):
         for i, contents in enumerate(icontents):
             filename = ifilename[i]
 
-            # خواندن داده‌ها و پاکسازی با parse_data
             df1, dfPeaks1, dateCol = parse_data(contents, filename, [''])
-            
-            # تنظیم ایندکس به ستون تاریخ
+
             df1 = df1.set_index(dateCol)
             dfPeaks1 = dfPeaks1.set_index(dateCol)
     
-            # ادغام داده‌ها از چند فایل کنار هم
             dff = pd.concat([dff, df1], axis=1)
             dffPeaks = pd.concat([dffPeaks, dfPeaks1], axis=1)
         
-        # اضافه کردن ستون نشانگر نمایش در گراف
         dffPeaks['ShowOnGraph'] = False    
 
-        # حذف ستون‌های اضافه مثل index اگر وجود داشته باشه
         if "index" in dff.columns:
             dff.drop("index", axis=1, inplace=True)
         if "index" in dffPeaks.columns:
             dffPeaks.drop("index", axis=1, inplace=True) 
 
-        # ریست ایندکس برای ارسال json
         dff = dff.reset_index()
         dffPeaks = dffPeaks.reset_index()
 
-    # آماده‌سازی گزینه‌ها برای چک‌لیست
-    # حذف ستون تاریخ واقعی
     checklist_options = [
         {"label": col, "value": col}
         for col in dff.columns.to_list()
         if col != dateCol
     ]
 
-    # بازگرداندن گزینه‌ها و داده‌ها
     return [
         checklist_options,
         dff.to_json(date_format='iso', orient='split'),
@@ -939,16 +929,13 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json, start_date,
                 params, _ = curve_fit(func, t, q, p0=p0, maxfev=10000)
                 q_fit = func(t, *params)
 
-                # جمع برای "total"
                 total_curve += q_fit
 
-                # اضافه به گراف
                 fig.add_trace(go.Scatter(
                     x=df["Date"], y=q_fit, mode="lines",
                     name=f"{model_type.title()} Fit"
                 ))
 
-                # ساختن متن نتایج
                 result_text = f"### {model_type.title()} Decline Parameters\n"
                 if model_type == "hyperbolic":
                     qi, Di, b = params
@@ -964,7 +951,6 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json, start_date,
             except Exception as e:
                 results_blocks.append(html.Div(f"❌ Error fitting {model_type}: {e}"))
 
-        # اگر total انتخاب شده بود
         if "total" in model_types:
             fig.add_trace(go.Scatter(
                 x=df["Date"], y=total_curve, mode="lines", name="Total Fit", line=dict(dash="dot", width=3)
@@ -994,25 +980,6 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json, start_date,
 )
 def debug_outputs(params, time_array):
     return str(params), str(time_array)
-    
-# def run_monte_carlo(qi, Di, b, n_iter=200, std_dev=0.1, t_max=60):
-
-#     t = np.arange(1, t_max + 1)
-
-#     results = np.zeros((n_iter, t_max))
-
-#     for i in range(n_iter):
-#         qi_i = np.random.normal(qi, std_dev * qi)
-#         Di_i = np.random.normal(Di, std_dev * Di)
-#         b_i = b 
-
-#         denom = (1 + b_i * Di_i * t)
-#         q_t = qi_i / np.power(denom, 1 / b_i)
-
-#         results[i, :] = q_t
-
-#     return results
-
 
 def create_monte_carlo_figure(results):
 
@@ -1030,7 +997,6 @@ def create_monte_carlo_figure(results):
             showlegend=False
         ))
 
-    # رسم میانگین
     mean_curve = np.mean(results, axis=0)
     fig.add_trace(go.Scatter(
         x=t,
