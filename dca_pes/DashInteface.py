@@ -222,12 +222,11 @@ monteCarloSimulation = dbc.Card(
 
         html.H5("Monte Carlo Simulation", className="card-title"),
 
-        dbc.Col([
-            dbc.Label("Economic Limit (q min)"),
-            dcc.Input(id="mc-q-min", type="number", value=1.0, step=0.1)
-        ], md=4),
-
         dbc.Row([
+            dbc.Col([
+                dbc.Label("Economic Limit (q min)"),
+                dcc.Input(id="mc-q-min", type="number", value=1.0, step=0.1, className="form-control")
+            ], md=6),
 
             dbc.Col([
                 dbc.Label("Iterations"),
@@ -241,32 +240,74 @@ monteCarloSimulation = dbc.Card(
                     className="form-control"
                 )
             ], md=6),
-
-            dbc.Col([
-                dbc.Label("Uncertainty Scale"),
-                dcc.Slider(
-                    id="mc-uncertainty",
-                    min=0.5,
-                    max=2.0,
-                    step=0.1,
-                    value=1.0,
-                    marks={
-                        0.5: "Low",
-                        1.0: "Base",
-                        1.5: "High",
-                        2.0: "Stress"
-                    },
-                    tooltip={"placement": "bottom", "always_visible": True}
-                )
-            ], md=6),
-
         ], className="mb-3"),
 
-        html.Div("Uncertainty scale multiplies the base parameter standard deviations.", 
+        html.H6("Per-Parameter Uncertainty (\u00b1 % around the fitted value)", className="fw-bold mt-2"),
+
+        dbc.Row([
+            dbc.Col([
+                dbc.Label("qi uncertainty (%)"),
+                dcc.Slider(
+                    id="mc-qi-uncertainty",
+                    min=0, max=100, step=1, value=5,
+                    marks={0: "0%", 25: "25%", 50: "50%", 75: "75%", 100: "100%"},
+                    tooltip={"placement": "bottom", "always_visible": True}
+                )
+            ], md=4),
+
+            dbc.Col([
+                dbc.Label("Di uncertainty (%)"),
+                dcc.Slider(
+                    id="mc-di-uncertainty",
+                    min=0, max=100, step=1, value=10,
+                    marks={0: "0%", 25: "25%", 50: "50%", 75: "75%", 100: "100%"},
+                    tooltip={"placement": "bottom", "always_visible": True}
+                )
+            ], md=4),
+
+            dbc.Col([
+                dbc.Label("b uncertainty (%)"),
+                dcc.Slider(
+                    id="mc-b-uncertainty",
+                    min=0, max=100, step=1, value=15,
+                    marks={0: "0%", 25: "25%", 50: "50%", 75: "75%", 100: "100%"},
+                    tooltip={"placement": "bottom", "always_visible": True}
+                )
+            ], md=4),
+        ], className="mb-2"),
+
+        html.Div("Each slider sets that parameter's own spread (as a % of its fitted value) used to sample the Monte Carlo runs. "
+                 "b uncertainty only affects models with a b parameter (Hyperbolic, Arps).",
                  className="text-muted small mb-2"),
+
+        dbc.Row([
+            dbc.Col([
+                dbc.Label("Di \u2194 b correlation"),
+                dcc.Slider(
+                    id="mc-di-b-correlation",
+                    min=-0.95, max=0.95, step=0.05, value=0.0,
+                    marks={-0.95: "-0.95", -0.5: "-0.5", 0: "0", 0.5: "0.5", 0.95: "0.95"},
+                    tooltip={"placement": "bottom", "always_visible": True}
+                )
+            ], md=8),
+        ], className="mb-2"),
+
+        html.Div("Controls whether Di and b are sampled independently (0) or move together: positive values mean "
+                 "high-Di draws tend to pair with high-b draws, negative values mean they move oppositely. "
+                 "Only applies to models with a b parameter (Hyperbolic, Arps).",
+                 className="text-muted small mb-2"),
+
+        dbc.Checklist(
+            id="mc-show-actual",
+            options=[{"label": "Show original data on Monte Carlo chart", "value": "show"}],
+            value=["show"],
+            switch=True,
+            className="mb-2"
+        ),
 
         dcc.Store(id="dca-params-store"),
         dcc.Store(id="dca-time-array"),
+        dcc.Store(id="dca-actual-data"),
 
         dbc.Button(
             "Run Monte Carlo",
@@ -456,8 +497,8 @@ def update_graph(selected_columns, df_json, peaks_json, show_peaks, start_date, 
         )
         return fig
 
-    df = pd.read_json(df_json, orient="split")
-    df_peaks = pd.read_json(peaks_json, orient="split")
+    df = pd.read_json(io.StringIO(df_json), orient="split")
+    df_peaks = pd.read_json(io.StringIO(peaks_json), orient="split")
 
     # اگر تاریخ شروع یا پایان مشخص شده، فیلتر کن
     if start_date:
@@ -717,7 +758,8 @@ def duong_decline(t, qi, a, m):
      Output("cumulative-graph", "figure"),
      Output("dca-results", "children"),
      Output("dca-params-store", "data"),
-     Output("dca-time-array", "data")],
+     Output("dca-time-array", "data"),
+     Output("dca-actual-data", "data")],
     Input("run-dca-btn", "n_clicks"),
     State("dca-column-dropdown", "value"),
     State("dca-model-selector", "value"),
@@ -734,7 +776,7 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json,
     if not column or not df_json or not model_types:
         raise exceptions.PreventUpdate
 
-    df = pd.read_json(df_json, orient="split")
+    df = pd.read_json(io.StringIO(df_json), orient="split")
     df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)
     df = df.dropna(subset=[column]).sort_values("Date")
 
@@ -743,7 +785,7 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json,
     if row_limit:
         df = df.head(row_limit)
     if df.empty:
-        return go.Figure(), go.Figure(), html.Div("No data"), {}, []
+        return go.Figure(), go.Figure(), html.Div("No data"), {}, [], {}
 
     t = (df["Date"] - df["Date"].iloc[0]).dt.days.values
     q = df[column].values
@@ -757,7 +799,7 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json,
 
     results_blocks = []
     params_store = {}
-    total_curve = np.zeros_like(q)
+    total_curve = np.zeros_like(q, dtype=float)
 
     for model_type in model_types:
         if model_type == "exponential":
@@ -793,10 +835,14 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json,
             x=df["Date"], y=Q_cum, mode="lines", name=f"{model_type.title()} Cumulative"
         ))
 
-        if model_type == "hyperbolic":
+        if model_type in ("hyperbolic", "arps"):
             qi, Di, b = params
             params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": float(b), "Q": float(Q_cum[-1])}
             result = f"### {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- b = {b:.2f}\n- EUR = {Q_cum[-1]:.2f}"
+        elif model_type == "duong":
+            qi, a, m = params
+            params_store[model_type] = {"qi": float(qi), "a": float(a), "m": float(m), "Q": float(Q_cum[-1])}
+            result = f"### {model_type.title()}\n- qi = {qi:.2f}\n- a = {a:.4f}\n- m = {m:.4f}\n- EUR = {Q_cum[-1]:.2f}"
         else:
             qi, Di = params[:2]
             params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": None, "Q": float(Q_cum[-1])}
@@ -828,7 +874,9 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json,
     if not show_cum_view:
         fig_cum = go.Figure()
 
-    return fig_rate, fig_cum, results_blocks, params_store, t.tolist()
+    actual_data = {"t": t.tolist(), "q": q.tolist(), "dates": df["Date"].dt.strftime("%Y-%m-%d").tolist()}
+
+    return fig_rate, fig_cum, results_blocks, params_store, t.tolist(), actual_data
     
 @app.callback(
     [Output("debug-params", "children"),
@@ -839,142 +887,149 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json,
 def debug_outputs(params, time_array):
     return str(params), str(time_array)
 
-def create_monte_carlo_figure(results):
-
-    n_iter, t_max = results.shape
-    t = np.arange(1, t_max + 1)
-
-    fig = go.Figure()
-
-    for i in range(n_iter):
-        fig.add_trace(go.Scatter(
-            x=t,
-            y=results[i, :],
-            mode='lines',
-            line=dict(width=1, color='rgba(0,0,255,0.1)'),
-            showlegend=False
-        ))
-
-    mean_curve = np.mean(results, axis=0)
-    fig.add_trace(go.Scatter(
-        x=t,
-        y=mean_curve,
-        mode='lines',
-        line=dict(width=3, color='blue'),
-        name='Mean'
-    ))
-
-    fig.update_layout(
-        title="Monte Carlo Simulation Results",
-        xaxis_title="Time (months)",
-        yaxis_title="Production Rate",
-        template="plotly_white",
-        height=400
-    )
-    return fig
-
 @app.callback(
     Output("monte-carlo-graph", "figure"),
     Input("run-monte-carlo-btn", "n_clicks"),
     State("dca-params-store", "data"),
     State("dca-model-selector", "value"),
     State("dca-time-array", "data"),
+    State("dca-actual-data", "data"),
     State("mc-iterations", "value"),
-    State("mc-uncertainty", "value"),
+    State("mc-qi-uncertainty", "value"),
+    State("mc-di-uncertainty", "value"),
+    State("mc-b-uncertainty", "value"),
+    State("mc-di-b-correlation", "value"),
     State("mc-q-min", "value"),
+    State("mc-show-actual", "value"),
     prevent_initial_call=True
 )
-def run_monte_carlo(n_clicks, params_store, model_types, t_array, n_simulations, uncertainty_scale, q_min):
+def run_monte_carlo(n_clicks, params_store, model_types, t_array, actual_data,
+                     n_simulations, qi_pct, di_pct, b_pct, di_b_corr, q_min, show_actual):
 
     if not params_store or not t_array or not model_types:
         raise exceptions.PreventUpdate
-
-    import numpy as np
-    import plotly.graph_objects as go
 
     model_type = next((m for m in model_types if m != "total"), None)
     if model_type not in params_store:
         raise exceptions.PreventUpdate
 
+    if model_type == "duong":
+        raise exceptions.PreventUpdate  # Duong has (qi, a, m), not (qi, Di, b) - not wired to these controls yet
+
     params = params_store[model_type]
-    t = np.array(t_array)
+    t = np.array(t_array, dtype=float)
+    dt = np.diff(t, prepend=t[0])
+    dt[dt <= 0] = 1.0
 
     n_simulations = int(n_simulations or 500)
-    uncertainty_scale = float(uncertainty_scale or 1.0)
+    qi_pct = float(qi_pct if qi_pct is not None else 5) / 100.0
+    di_pct = float(di_pct if di_pct is not None else 10) / 100.0
+    b_pct = float(b_pct if b_pct is not None else 15) / 100.0
+    rho = float(di_b_corr if di_b_corr is not None else 0.0)
     q_min = float(q_min or 0.0)
 
     qi_mu = params["qi"]
     Di_mu = params["Di"]
-    b_mu  = params.get("b")
+    b_mu = params.get("b")
 
-    qi_sigma = 0.05 * qi_mu * uncertainty_scale
-    Di_sigma = 0.10 * Di_mu * uncertainty_scale
-    b_sigma  = 0.15 * b_mu  * uncertainty_scale if b_mu is not None else None
+    rng = np.random.default_rng()
 
-    eur_list = []
-    simulations = []
+    # qi is sampled independently of Di/b
+    qi_samples = rng.normal(qi_mu, qi_pct * qi_mu, n_simulations)
+    qi_samples = np.clip(qi_samples, 1e-6, None)
 
-    dt = np.diff(t, prepend=t[0])
-    dt[dt <= 0] = 1.0
+    if b_mu is not None:
+        # Correlate Di and b via a shared standard-normal component so the
+        # "Di <-> b correlation" slider actually links the two draws instead
+        # of sampling every parameter independently.
+        z1 = rng.standard_normal(n_simulations)
+        z2 = rng.standard_normal(n_simulations)
+        z2_corr = rho * z1 + np.sqrt(max(1 - rho ** 2, 0.0)) * z2
 
-    for _ in range(n_simulations):
+        Di_samples = Di_mu + (di_pct * Di_mu) * z1
+        b_samples = b_mu + (b_pct * b_mu) * z2_corr
 
-        qi = np.random.normal(qi_mu, qi_sigma)
-        Di = np.random.normal(Di_mu, Di_sigma)
-        b  = np.random.normal(b_mu, b_sigma) if b_mu is not None else None
+        Di_samples = np.clip(Di_samples, 1e-6, 10.0)
+        b_samples = np.clip(b_samples, 0.05, 2.0)
+    else:
+        Di_samples = rng.normal(Di_mu, di_pct * Di_mu, n_simulations)
+        Di_samples = np.clip(Di_samples, 1e-6, 10.0)
+        b_samples = None
 
-        qi = np.clip(qi, 1e-6, None)
-        Di = np.clip(Di, 1e-6, 10.0)
-        if b is not None:
-            b = np.clip(b, 0.05, 2.0)
+    # Vectorized: (n_simulations, 1) params broadcast against (1, n_t) time array
+    qi_col = qi_samples[:, None]
+    Di_col = Di_samples[:, None]
+    t_row = t[None, :]
 
-        if model_type == "exponential":
-            q_sim = qi * np.exp(-Di * t)
-        elif model_type == "harmonic":
-            q_sim = qi / (1 + Di * t)
-        elif model_type == "hyperbolic":
-            q_sim = qi / np.power(1 + b * Di * t, 1 / b)
-        elif model_type == "duong":
-            q_sim = qi * np.exp(-Di * t) * np.power(t + 1, -b)
-        elif model_type == "arps":
-            q_sim = qi / np.power(1 + b * Di * t, 1 / b)
-        else:
-            continue
+    if model_type == "exponential":
+        sims = qi_col * np.exp(-Di_col * t_row)
+    elif model_type == "harmonic":
+        sims = qi_col / (1 + Di_col * t_row)
+    elif model_type in ("hyperbolic", "arps"):
+        b_col = b_samples[:, None]
+        sims = qi_col / np.power(1 + b_col * Di_col * t_row, 1 / b_col)
+    else:
+        raise exceptions.PreventUpdate
 
-        # economic cutoff
-        mask = q_sim >= q_min
-        q_cut = q_sim[mask]
-        dt_cut = dt[mask]
+    # Economic cutoff applied per-simulation, then EUR = area under the curve up to cutoff
+    below_cutoff = sims < q_min
+    sims_cut = np.where(below_cutoff, 0.0, sims)
+    eur_array = np.sum(sims_cut * dt[None, :], axis=1)
 
-        Q_cum = np.sum(q_cut * dt_cut)
-        eur_list.append(Q_cum)
+    p10_eur, p50_eur, p90_eur = np.percentile(eur_array, [10, 50, 90])
 
-        simulations.append(q_sim)
-
-    eur_array = np.array(eur_list)
-
-    p10 = np.percentile(eur_array, 10)
-    p50 = np.percentile(eur_array, 50)
-    p90 = np.percentile(eur_array, 90)
+    # Fan chart: percentile across simulations at each time step (not per-EUR)
+    p10_curve = np.percentile(sims, 10, axis=0)
+    p50_curve = np.percentile(sims, 50, axis=0)
+    p90_curve = np.percentile(sims, 90, axis=0)
+    mean_curve = np.mean(sims, axis=0)
 
     fig = go.Figure()
 
-    for sim in simulations:
+    # A light sample of individual realizations for visual texture (capped so the
+    # figure stays responsive even with thousands of iterations)
+    n_shown = min(n_simulations, 40)
+    show_idx = np.linspace(0, n_simulations - 1, n_shown).astype(int)
+    for i in show_idx:
         fig.add_trace(go.Scatter(
-            x=t,
-            y=sim,
-            mode="lines",
-            line=dict(width=1),
-            opacity=0.1,
-            showlegend=False
+            x=t, y=sims[i, :], mode="lines",
+            line=dict(width=1, color="rgba(100,100,100,0.15)"),
+            showlegend=False, hoverinfo="skip"
+        ))
+
+    # P10-P90 shaded band
+    fig.add_trace(go.Scatter(
+        x=np.concatenate([t, t[::-1]]),
+        y=np.concatenate([p90_curve, p10_curve[::-1]]),
+        fill="toself",
+        fillcolor="rgba(0,100,255,0.15)",
+        line=dict(color="rgba(0,0,0,0)"),
+        name="P10-P90 range",
+        hoverinfo="skip"
+    ))
+
+    fig.add_trace(go.Scatter(x=t, y=p10_curve, mode="lines",
+                              line=dict(width=1, dash="dot", color="rgba(0,80,200,0.8)"), name="P10"))
+    fig.add_trace(go.Scatter(x=t, y=p90_curve, mode="lines",
+                              line=dict(width=1, dash="dot", color="rgba(0,80,200,0.8)"), name="P90"))
+    fig.add_trace(go.Scatter(x=t, y=p50_curve, mode="lines",
+                              line=dict(width=2, color="rgba(0,60,180,1)"), name="P50 (median)"))
+    fig.add_trace(go.Scatter(x=t, y=mean_curve, mode="lines",
+                              line=dict(width=3, color="blue"), name="Mean"))
+
+    if show_actual and "show" in show_actual and actual_data:
+        fig.add_trace(go.Scatter(
+            x=actual_data["t"], y=actual_data["q"], mode="markers",
+            marker=dict(size=5, color="black"), name="Actual data"
         ))
 
     fig.update_layout(
-        title=f"Monte Carlo Simulation ({model_type.title()})<br>"
-              f"P10 EUR={p10:.1f}, P50 EUR={p50:.1f}, P90 EUR={p90:.1f}",
+        title=f"Monte Carlo Simulation ({model_type.title()}) - {n_simulations} iterations<br>"
+              f"P10 EUR={p10_eur:.1f} | P50 EUR={p50_eur:.1f} | P90 EUR={p90_eur:.1f}",
         xaxis_title="Time (days)",
         yaxis_title="Rate",
-        template="plotly_white"
+        template="plotly_white",
+        height=500
     )
 
     return fig
