@@ -32,7 +32,7 @@ def get_versions(modules):
     return versions
 
 if __name__ == "__main__":
-    filename = "V2/DashInteface.py"  # replace with your python file
+    filename = "dca_pes/DashInteface.py"  # replace with your python file
     imports = get_imports_from_file(filename)
     versions = get_versions(imports)
 

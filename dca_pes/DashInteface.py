@@ -19,7 +19,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from V2.DCA04 import *
+from dca_pes.DCA04 import *
 
 
 external_stylesheets = [
