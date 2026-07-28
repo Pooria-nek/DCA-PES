@@ -287,100 +287,6 @@ monteCarloSimulation = dbc.Card(
     }
 )
 
-controls22 = dbc.Card(
-    [
-        html.H4([
-            html.I(className="bi bi-bar-chart-line-fill me-2"),
-            "Deterministic Analysis"
-        ]),
-        html.Div(id='output-data-upload22'),
-        html.Br(),
-
-        dbc.Checklist(
-            id="ChecklistOptionsSum",
-            options=[
-                {"label": "Show total", "value": "showTotal", "disabled": True}
-            ],
-            value=["showTotal"],
-            inline=True,
-            inputStyle={"marginLeft": "10px", "marginRight": "5px"},
-            style={"marginBottom": "10px"}
-        ),
-
-        dbc.Checklist(
-            id="ChecklistOptionsPeaks",
-            options=[
-                {"label": "Show peaks", "value": "showPeaks"}
-            ],
-            value=[],
-            inline=True,
-            inputStyle={"marginLeft": "10px", "marginRight": "5px"},
-            style={"marginBottom": "10px"}
-        ),
-
-        dbc.Checklist(
-            id="ChecklistOptionsDeclineCurve",
-            options=[
-                {"label": "Arps decline curve", "value": "showArpes"},
-                {"label": "Duong decline curve", "value": "showDuong"}
-            ],
-            value=[],
-            inline=False,
-            inputStyle={"marginLeft": "10px", "marginRight": "5px"},
-            style={"marginBottom": "15px"}
-        ),
-
-        html.H6("Number of months to predict:", className="fw-bold"),
-        dcc.Slider(
-            id="slider_numberofmonths",
-            min=1,
-            max=100,
-            step=1,
-            value=20,
-            marks={i: str(i) for i in [1, 20, 40, 60, 80, 100]},
-            tooltip={"placement": "bottom", "always_visible": True},
-        ),
-        html.Br(),
-
-        dbc.Card(
-            dcc.Graph(id="dca-graph"),
-            body=True,
-            className="mt-2",
-            style={
-                "height": "400px",
-                "backgroundColor": "#ffffff",
-                "border": "1px solid #dee2e6",
-                "borderRadius": "6px",
-                "padding": "10px"
-            }
-        ),
-
-        html.Br(),
-
-        dbc.Row([
-            dbc.Col([
-                html.H6("Selected Data"),
-                html.Pre(id='selected-data-printout', style=styles['pre']),
-            ], md=6),
-
-            dbc.Col([
-                html.H6("DCA Parameters"),
-                html.Pre(id='DCA-parameters-printout', style=styles['pre']),
-            ], md=6),
-        ]),
-
-        html.Div([
-            dcc.Markdown("""
-                **Tip**: Use the lasso or rectangle tool in the graph menu bar to select points.
-                If `layout.clickmode = 'event+select'`, holding `Shift` allows multi-selection.
-            """, className="text-muted")
-        ], className="mt-3")
-    ],
-    body=True,
-    color="#F9F9F9",
-    className="shadow-sm"
-)
-
 app.layout = html.Div(
     [
         dbc.Container(
@@ -393,9 +299,6 @@ app.layout = html.Div(
                                 html.Hr(),
                                 dcc.Store(id='dataframevalue'),
                                 dcc.Store(id='dataframepeaksvalue'),
-                                dcc.Store(id='dataframepeaksvalueUseForDCA'),
-                                dcc.Store(id="dca-parameters"),
-                                dcc.Store(id="dca-time-array"),
 
                                 dbc.Row(
                                     [
@@ -631,64 +534,6 @@ def update_graph(selected_columns, df_json, peaks_json, show_peaks, start_date, 
     )
 
     return fig
-
-#------------------------------------------------------------------------------
-@app.callback([
-     Output('selected-data-printout', 'children'),
-     Output('dataframepeaksvalueUseForDCA', 'data'),
-    ],     
-    [Input('dca-graph', 'selectedData')],
-    [State('dataframepeaksvalue', 'data')]
-    )
-def display_selected_data(selectedDatas,dfPeaks):
-    # #mj=selectedDatas
-    # sample_list = [selectedDatas,dfPeaksvalue]
-    # file_name = "GraphSelectedData.pkl"
-    # open_file = open(file_name, "wb")
-    # pickle.dump(sample_list, open_file)
-    # open_file.close()
-    dfPeaksvalue=pd.read_json(dfPeaks, orient='split')
-    dfPeaksvalue['ShowOnGraph']=False
-    for ii in  range(len(selectedDatas['points'])):
-          # 
-          mjddf=dfPeaksvalue.loc[dfPeaksvalue['Date'] == selectedDatas['points'][ii]['x']]
-          mjddf=mjddf.reset_index()
-          dfPeaksvalue['ShowOnGraph'].loc[mjddf.iloc[0,0]] = True
-
-    return json.dumps(selectedDatas, indent=2), dfPeaksvalue.to_json(date_format='iso', orient='split')
-
-#------------------------------------------------------------------------------
-@app.callback(
-   Output(component_id='Trinangular-right', component_property='style'),
-   [Input(component_id='prob-dist-button', component_property='value')])
-
-def show_hide_element(DistRadioButton):
-    if DistRadioButton == 'Normal':
-        return {'display': 'none'}
-    if DistRadioButton == 'Triangular':
-        return {'display': 'block'}
-   
-#------------------------------------------------------------------------------
-@app.callback(
-   Output(component_id='Trinangular-left', component_property='style'),
-   [Input(component_id='prob-dist-button', component_property='value')])
-
-def show_hide_element(DistRadioButton):
-    if DistRadioButton == 'Normal':
-        return {'display': 'none'}
-    if DistRadioButton == 'Triangular':
-        return {'display': 'block'}
-   
-#------------------------------------------------------------------------------
-@app.callback(
-   Output(component_id='Normal-std', component_property='style'),
-   [Input(component_id='prob-dist-button', component_property='value')])
-
-def show_hide_element(DistRadioButton):
-    if DistRadioButton == 'Normal':
-        return {'display': 'block'}
-    if DistRadioButton == 'Triangular':
-        return {'display': 'none'}
 
 #------------------------------------------------------------------------------
 #---------------------PARSE _ DATA---------------------------------------------
