@@ -192,15 +192,6 @@ declineCurveAnalysis = dbc.Card(
             ], width=7),
         ], className="mb-3"),
 
-
-        # --- Run Button ---
-        dbc.Row([
-            dbc.Col(
-                dbc.Button("Run DCA", id="run-dca-btn", color="primary", className="w-100"),
-                width=3
-            )
-        ], justify="start", className="mb-4"),
-
         dbc.Row([
             dbc.Col(dbc.Switch(id="show-cumulative-toggle", label="Show cumulative on main graph", value=False), md=4),
             dbc.Col(dbc.Switch(id="show-cumulative-view", label="Show cumulative-only view", value=False), md=4),
@@ -778,18 +769,17 @@ def duong_decline(t, qi, a, m):
      Output("dca-params-store", "data"),
      Output("dca-time-array", "data"),
      Output("dca-actual-data", "data")],
-    Input("run-dca-btn", "n_clicks"),
-    State("dca-column-dropdown", "value"),
-    State("dca-model-selector", "value"),
-    State("dca-row-slider", "value"),
-    State("dataframevalue", "data"),
-    State("dca-date-range", "start_date"),
-    State("dca-date-range", "end_date"),
-    State("show-cumulative-toggle", "value"),
-    State("show-cumulative-view", "value"),
+    Input("dca-column-dropdown", "value"),
+    Input("dca-model-selector", "value"),
+    Input("dca-row-slider", "value"),
+    Input("dataframevalue", "data"),
+    Input("dca-date-range", "start_date"),
+    Input("dca-date-range", "end_date"),
+    Input("show-cumulative-toggle", "value"),
+    Input("show-cumulative-view", "value"),
     prevent_initial_call=True
 )
-def run_dca_model(n_clicks, columns, model_types, row_limit, df_json,
+def run_dca_model(columns, model_types, row_limit, df_json,
                   start_date, end_date, show_cum_on_rate, show_cum_view):
     if not columns or not df_json or not model_types:
         raise exceptions.PreventUpdate
