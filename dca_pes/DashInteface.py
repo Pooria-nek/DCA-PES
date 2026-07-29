@@ -901,7 +901,7 @@ def run_dca_model(columns, model_types, row_limit, df_json,
 
     fig_rate.update_layout(
         title="Rate View" + (" \u2014 Comparison" if len(columns) > 1 else ""),
-        xaxis_title="Date",
+        xaxis=dict(title="Date", rangeslider=dict(visible=True), type="date"),
         yaxis_title="Rate",
         yaxis2=dict(title="Cumulative", overlaying="y", side="right"),
         template="plotly_white"
@@ -918,6 +918,40 @@ def run_dca_model(columns, model_types, row_limit, df_json,
         fig_cum = go.Figure()
 
     return fig_rate, fig_cum, results_blocks, params_store, last_t, actual_data_store
+
+@app.callback(
+    [Output("dca-date-range", "start_date"),
+     Output("dca-date-range", "end_date")],
+    Input("dca-graph", "relayoutData"),
+    prevent_initial_call=True
+)
+def sync_date_range_from_graph_selection(relayout_data):
+    """Dragging the range slider (or zoom-selecting the plot area) under the
+    rate chart updates the Date Range picker, which in turn re-fits DCA to
+    just that window since it's already an Input to run_dca_model."""
+    if not relayout_data:
+        raise exceptions.PreventUpdate
+
+    # Plotly sends different key shapes depending on whether the range came from
+    # the built-in rangeslider drag or a click-drag zoom on the main plot area.
+    if "xaxis.range[0]" in relayout_data and "xaxis.range[1]" in relayout_data:
+        start = relayout_data["xaxis.range[0]"]
+        end = relayout_data["xaxis.range[1]"]
+    elif "xaxis.range" in relayout_data and len(relayout_data["xaxis.range"]) == 2:
+        start, end = relayout_data["xaxis.range"]
+    else:
+        # e.g. double-click autorange reset, or an unrelated layout event
+        # (legend click, etc.) - nothing to sync.
+        raise exceptions.PreventUpdate
+
+    try:
+        start_date = pd.to_datetime(start).strftime("%Y-%m-%d")
+        end_date = pd.to_datetime(end).strftime("%Y-%m-%d")
+    except (ValueError, TypeError):
+        raise exceptions.PreventUpdate
+
+    return start_date, end_date
+
     
 @app.callback(
     [Output("debug-params", "children"),
