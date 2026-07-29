@@ -440,18 +440,22 @@ def update_checklist(icontents, ifilename, date):
 
             df1, dfPeaks1, dateCol = parse_data(contents, filename, [''])
 
+            if df1 is None or dateCol is None:
+                print(f"Skipping '{filename}': could not be parsed (see error above).")
+                continue
+
             df1 = df1.set_index(dateCol)
             dfPeaks1 = dfPeaks1.set_index(dateCol)
-    
+
             dff = pd.concat([dff, df1], axis=1)
             dffPeaks = pd.concat([dffPeaks, dfPeaks1], axis=1)
-        
-        dffPeaks['ShowOnGraph'] = False    
+
+        dffPeaks['ShowOnGraph'] = False
 
         if "index" in dff.columns:
             dff.drop("index", axis=1, inplace=True)
         if "index" in dffPeaks.columns:
-            dffPeaks.drop("index", axis=1, inplace=True) 
+            dffPeaks.drop("index", axis=1, inplace=True)
 
         dff = dff.reset_index()
         dffPeaks = dffPeaks.reset_index()
@@ -459,7 +463,7 @@ def update_checklist(icontents, ifilename, date):
     checklist_options = [
         {"label": col, "value": col}
         for col in dff.columns.to_list()
-        if col != dateCol
+        if col != "Date"
     ]
 
     return [
@@ -604,13 +608,16 @@ def parse_data(contents, filename, ChecklistOptionsMonth):
         # Add filename prefix to columns (for uniqueness)
         df.columns = [f"{filename} : {col}" for col in df.columns]
 
-        # Detect and parse datetime columns
+        # Detect and parse datetime columns. Check is dtype-agnostic (not 'object'-only)
+        # because pandas 3.x defaults text columns to a dedicated 'str' dtype rather than
+        # 'object', which would otherwise make this loop skip every text column entirely.
         for col in df.columns:
-            if df[col].dtype == 'object':
-                try:
-                    df[col] = pd.to_datetime(df[col])
-                except Exception:
-                    pass
+            if pd.api.types.is_numeric_dtype(df[col]) or pd.api.types.is_datetime64_any_dtype(df[col]):
+                continue
+            try:
+                df[col] = pd.to_datetime(df[col])
+            except Exception:
+                pass
 
         datetime_cols = df.select_dtypes(include=["datetime64[ns]"])
         if datetime_cols.empty:
