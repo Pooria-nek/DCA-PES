@@ -183,10 +183,11 @@ declineCurveAnalysis = dbc.Card(
             ], width=5),
 
             dbc.Col([
-                html.Label("Select Column:"),
+                html.Label("Select Column(s):"),
                 dcc.Dropdown(
                     id="dca-column-dropdown",
-                    placeholder="Select rate column..."
+                    placeholder="Select rate column(s)...",
+                    multi=True
                 )
             ], width=7),
         ], className="mb-3"),
@@ -221,6 +222,16 @@ monteCarloSimulation = dbc.Card(
     dbc.CardBody([
 
         html.H5("Monte Carlo Simulation", className="card-title"),
+
+        dbc.Row([
+            dbc.Col([
+                dbc.Label("Fit to simulate"),
+                dcc.Dropdown(
+                    id="mc-fit-selector",
+                    placeholder="Run a DCA fit above first...",
+                )
+            ], md=12),
+        ], className="mb-3"),
 
         dbc.Row([
             dbc.Col([
@@ -778,93 +789,128 @@ def duong_decline(t, qi, a, m):
     State("show-cumulative-view", "value"),
     prevent_initial_call=True
 )
-def run_dca_model(n_clicks, column, model_types, row_limit, df_json,
+def run_dca_model(n_clicks, columns, model_types, row_limit, df_json,
                   start_date, end_date, show_cum_on_rate, show_cum_view):
-    if not column or not df_json or not model_types:
+    if not columns or not df_json or not model_types:
         raise exceptions.PreventUpdate
 
-    df = pd.read_json(io.StringIO(df_json), orient="split")
-    df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)
-    df = df.dropna(subset=[column]).sort_values("Date")
+    if isinstance(columns, str):
+        columns = [columns]
+
+    df_full = pd.read_json(io.StringIO(df_json), orient="split")
+    df_full["Date"] = pd.to_datetime(df_full["Date"]).dt.tz_localize(None)
 
     if start_date and end_date:
-        df = df[(df["Date"] >= pd.to_datetime(start_date)) & (df["Date"] <= pd.to_datetime(end_date))]
-    if row_limit:
-        df = df.head(row_limit)
-    if df.empty:
-        return go.Figure(), go.Figure(), html.Div("No data"), {}, [], {}
-
-    t = (df["Date"] - df["Date"].iloc[0]).dt.days.values
-    q = df[column].values
-    dt = np.diff(t, prepend=t[0])
-    dt[dt <= 0] = 1.0
+        df_full = df_full[(df_full["Date"] >= pd.to_datetime(start_date)) & (df_full["Date"] <= pd.to_datetime(end_date))]
 
     fig_rate = go.Figure()
-    fig_rate.add_trace(go.Scatter(x=df["Date"], y=q, mode="markers", name="Actual"))
-
     fig_cum = go.Figure()
-
     results_blocks = []
     params_store = {}
-    total_curve = np.zeros_like(q, dtype=float)
+    actual_data_store = {}
+    last_t = []
 
-    for model_type in model_types:
-        if model_type == "exponential":
-            func, p0 = exponential_decline, [q[0], 0.01]
-        elif model_type == "harmonic":
-            func, p0 = harmonic_decline, [q[0], 0.01]
-        elif model_type == "hyperbolic":
-            func, p0 = hyperbolic_decline, [q[0], 0.01, 0.5]
-        elif model_type == "duong":
-            func, p0 = duong_decline, [q[0], 0.001, 0.5]
-        elif model_type == "arps":
-            func, p0 = arps_decline, [q[0], 0.01, 0.5]
-        elif model_type == "total":
-            continue
-        else:
+    # A distinct color per column so every model fitted to the same column shares
+    # a color family, making cross-column comparison readable at a glance.
+    palette = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#ff7f0e", "#17becf", "#e377c2", "#8c564b"]
+
+    for col_idx, column in enumerate(columns):
+        color = palette[col_idx % len(palette)]
+
+        df = df_full.dropna(subset=[column]).sort_values("Date")
+        if row_limit:
+            df = df.head(row_limit)
+        if df.empty:
             continue
 
-        params, _ = curve_fit(func, t, q, p0=p0, maxfev=10000)
-        q_fit = func(t, *params)
-        Q_cum = np.cumsum(q_fit * dt)
+        t = (df["Date"] - df["Date"].iloc[0]).dt.days.values
+        q = df[column].values
+        dt = np.diff(t, prepend=t[0])
+        dt[dt <= 0] = 1.0
+        last_t = t.tolist()
 
-        total_curve += q_fit
+        fig_rate.add_trace(go.Scatter(
+            x=df["Date"], y=q, mode="markers", name=f"{column} (actual)",
+            marker=dict(color=color, size=5)
+        ))
 
-        fig_rate.add_trace(go.Scatter(x=df["Date"], y=q_fit, mode="lines", name=f"{model_type.title()} Rate"))
+        col_params = {}
+        total_curve = np.zeros_like(q, dtype=float)
+        col_results = []
 
-        if show_cum_on_rate:
+        for model_type in model_types:
+            if model_type == "exponential":
+                func, p0 = exponential_decline, [q[0], 0.01]
+            elif model_type == "harmonic":
+                func, p0 = harmonic_decline, [q[0], 0.01]
+            elif model_type == "hyperbolic":
+                func, p0 = hyperbolic_decline, [q[0], 0.01, 0.5]
+            elif model_type == "duong":
+                func, p0 = duong_decline, [q[0], 0.001, 0.5]
+            elif model_type == "arps":
+                func, p0 = arps_decline, [q[0], 0.01, 0.5]
+            elif model_type == "total":
+                continue
+            else:
+                continue
+
+            try:
+                params, _ = curve_fit(func, t, q, p0=p0, maxfev=10000)
+            except RuntimeError as e:
+                col_results.append(dcc.Markdown(f"### {column} \u2014 {model_type.title()}\n_Fit failed: {e}_"))
+                continue
+
+            q_fit = func(t, *params)
+            Q_cum = np.cumsum(q_fit * dt)
+            total_curve += q_fit
+
+            dash_style = "solid" if model_type == "hyperbolic" else ("dash" if model_type == "arps" else "dot")
             fig_rate.add_trace(go.Scatter(
-                x=df["Date"], y=Q_cum, mode="lines", name=f"{model_type.title()} Cum",
-                yaxis="y2", line=dict(dash="dot")
+                x=df["Date"], y=q_fit, mode="lines", name=f"{column} \u2014 {model_type.title()}",
+                line=dict(color=color, dash=dash_style)
             ))
 
-        fig_cum.add_trace(go.Scatter(
-            x=df["Date"], y=Q_cum, mode="lines", name=f"{model_type.title()} Cumulative"
-        ))
+            if show_cum_on_rate:
+                fig_rate.add_trace(go.Scatter(
+                    x=df["Date"], y=Q_cum, mode="lines", name=f"{column} \u2014 {model_type.title()} Cum",
+                    yaxis="y2", line=dict(dash="dot", color=color)
+                ))
 
-        if model_type in ("hyperbolic", "arps"):
-            qi, Di, b = params
-            params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": float(b), "Q": float(Q_cum[-1])}
-            result = f"### {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- b = {b:.2f}\n- EUR = {Q_cum[-1]:.2f}"
-        elif model_type == "duong":
-            qi, a, m = params
-            params_store[model_type] = {"qi": float(qi), "a": float(a), "m": float(m), "Q": float(Q_cum[-1])}
-            result = f"### {model_type.title()}\n- qi = {qi:.2f}\n- a = {a:.4f}\n- m = {m:.4f}\n- EUR = {Q_cum[-1]:.2f}"
-        else:
-            qi, Di = params[:2]
-            params_store[model_type] = {"qi": float(qi), "Di": float(Di), "b": None, "Q": float(Q_cum[-1])}
-            result = f"### {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- EUR = {Q_cum[-1]:.2f}"
+            fig_cum.add_trace(go.Scatter(
+                x=df["Date"], y=Q_cum, mode="lines", name=f"{column} \u2014 {model_type.title()} Cumulative",
+                line=dict(color=color)
+            ))
 
-        results_blocks.append(dcc.Markdown(result))
+            if model_type in ("hyperbolic", "arps"):
+                qi, Di, b = params
+                col_params[model_type] = {"qi": float(qi), "Di": float(Di), "b": float(b), "Q": float(Q_cum[-1])}
+                result = f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- b = {b:.2f}\n- EUR = {Q_cum[-1]:.2f}"
+            elif model_type == "duong":
+                qi, a, m = params
+                col_params[model_type] = {"qi": float(qi), "a": float(a), "m": float(m), "Q": float(Q_cum[-1])}
+                result = f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- a = {a:.4f}\n- m = {m:.4f}\n- EUR = {Q_cum[-1]:.2f}"
+            else:
+                qi, Di = params[:2]
+                col_params[model_type] = {"qi": float(qi), "Di": float(Di), "b": None, "Q": float(Q_cum[-1])}
+                result = f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- EUR = {Q_cum[-1]:.2f}"
 
-    if "total" in model_types:
-        fig_rate.add_trace(go.Scatter(
-            x=df["Date"], y=total_curve, mode="lines", name="Total Rate",
-            line=dict(dash="dot", width=3)
-        ))
+            col_results.append(dcc.Markdown(result))
+
+        if "total" in model_types and col_params:
+            fig_rate.add_trace(go.Scatter(
+                x=df["Date"], y=total_curve, mode="lines", name=f"{column} \u2014 Total",
+                line=dict(dash="dot", width=3, color=color)
+            ))
+
+        results_blocks.extend(col_results)
+        params_store[column] = col_params
+        actual_data_store[column] = {"t": t.tolist(), "q": q.tolist(), "dates": df["Date"].dt.strftime("%Y-%m-%d").tolist()}
+
+    if not params_store:
+        return go.Figure(), go.Figure(), html.Div("No data"), {}, [], {}
 
     fig_rate.update_layout(
-        title="Rate View",
+        title="Rate View" + (" \u2014 Comparison" if len(columns) > 1 else ""),
         xaxis_title="Date",
         yaxis_title="Rate",
         yaxis2=dict(title="Cumulative", overlaying="y", side="right"),
@@ -872,7 +918,7 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json,
     )
 
     fig_cum.update_layout(
-        title="Cumulative View",
+        title="Cumulative View" + (" \u2014 Comparison" if len(columns) > 1 else ""),
         xaxis_title="Date",
         yaxis_title="Cumulative",
         template="plotly_white"
@@ -881,9 +927,7 @@ def run_dca_model(n_clicks, column, model_types, row_limit, df_json,
     if not show_cum_view:
         fig_cum = go.Figure()
 
-    actual_data = {"t": t.tolist(), "q": q.tolist(), "dates": df["Date"].dt.strftime("%Y-%m-%d").tolist()}
-
-    return fig_rate, fig_cum, results_blocks, params_store, t.tolist(), actual_data
+    return fig_rate, fig_cum, results_blocks, params_store, last_t, actual_data_store
     
 @app.callback(
     [Output("debug-params", "children"),
@@ -895,11 +939,27 @@ def debug_outputs(params, time_array):
     return str(params), str(time_array)
 
 @app.callback(
+    [Output("mc-fit-selector", "options"),
+     Output("mc-fit-selector", "value")],
+    Input("dca-params-store", "data")
+)
+def update_mc_fit_options(params_store):
+    if not params_store:
+        return [], None
+    options = []
+    for column, models in params_store.items():
+        for model_type in models:
+            key = f"{column}::{model_type}"
+            label = f"{column} \u2014 {model_type.title()}"
+            options.append({"label": label, "value": key})
+    default = options[0]["value"] if options else None
+    return options, default
+
+@app.callback(
     Output("monte-carlo-graph", "figure"),
     Input("run-monte-carlo-btn", "n_clicks"),
     State("dca-params-store", "data"),
-    State("dca-model-selector", "value"),
-    State("dca-time-array", "data"),
+    State("mc-fit-selector", "value"),
     State("dca-actual-data", "data"),
     State("mc-iterations", "value"),
     State("mc-qi-uncertainty", "value"),
@@ -910,21 +970,25 @@ def debug_outputs(params, time_array):
     State("mc-show-actual", "value"),
     prevent_initial_call=True
 )
-def run_monte_carlo(n_clicks, params_store, model_types, t_array, actual_data,
+def run_monte_carlo(n_clicks, params_store, fit_key, actual_data_store,
                      n_simulations, qi_pct, di_pct, b_pct, di_b_corr, q_min, show_actual):
 
-    if not params_store or not t_array or not model_types:
+    if not params_store or not fit_key or "::" not in fit_key:
         raise exceptions.PreventUpdate
 
-    model_type = next((m for m in model_types if m != "total"), None)
-    if model_type not in params_store:
+    column, model_type = fit_key.split("::", 1)
+    if column not in params_store or model_type not in params_store[column]:
         raise exceptions.PreventUpdate
 
     if model_type == "duong":
         raise exceptions.PreventUpdate  # Duong has (qi, a, m), not (qi, Di, b) - not wired to these controls yet
 
-    params = params_store[model_type]
-    t = np.array(t_array, dtype=float)
+    params = params_store[column][model_type]
+    actual_data = (actual_data_store or {}).get(column)
+    if not actual_data or not actual_data.get("t"):
+        raise exceptions.PreventUpdate
+
+    t = np.array(actual_data["t"], dtype=float)
     dt = np.diff(t, prepend=t[0])
     dt[dt <= 0] = 1.0
 
@@ -941,8 +1005,14 @@ def run_monte_carlo(n_clicks, params_store, model_types, t_array, actual_data,
 
     rng = np.random.default_rng()
 
+    # abs() because sigma must be non-negative even when a fitted parameter came out
+    # negative (e.g. Di<0 for a series that isn't cleanly declining over the fit window)
+    qi_sigma = qi_pct * abs(qi_mu)
+    di_sigma = di_pct * abs(Di_mu)
+    b_sigma = b_pct * abs(b_mu) if b_mu is not None else None
+
     # qi is sampled independently of Di/b
-    qi_samples = rng.normal(qi_mu, qi_pct * qi_mu, n_simulations)
+    qi_samples = rng.normal(qi_mu, qi_sigma, n_simulations)
     qi_samples = np.clip(qi_samples, 1e-6, None)
 
     if b_mu is not None:
@@ -953,13 +1023,13 @@ def run_monte_carlo(n_clicks, params_store, model_types, t_array, actual_data,
         z2 = rng.standard_normal(n_simulations)
         z2_corr = rho * z1 + np.sqrt(max(1 - rho ** 2, 0.0)) * z2
 
-        Di_samples = Di_mu + (di_pct * Di_mu) * z1
-        b_samples = b_mu + (b_pct * b_mu) * z2_corr
+        Di_samples = Di_mu + di_sigma * z1
+        b_samples = b_mu + b_sigma * z2_corr
 
         Di_samples = np.clip(Di_samples, 1e-6, 10.0)
         b_samples = np.clip(b_samples, 0.05, 2.0)
     else:
-        Di_samples = rng.normal(Di_mu, di_pct * Di_mu, n_simulations)
+        Di_samples = rng.normal(Di_mu, di_sigma, n_simulations)
         Di_samples = np.clip(Di_samples, 1e-6, 10.0)
         b_samples = None
 
@@ -1031,7 +1101,7 @@ def run_monte_carlo(n_clicks, params_store, model_types, t_array, actual_data,
         ))
 
     fig.update_layout(
-        title=f"Monte Carlo Simulation ({model_type.title()}) - {n_simulations} iterations<br>"
+        title=f"Monte Carlo Simulation \u2014 {column} ({model_type.title()}) - {n_simulations} iterations<br>"
               f"P10 EUR={p10_eur:.1f} | P50 EUR={p50_eur:.1f} | P90 EUR={p90_eur:.1f}",
         xaxis_title="Time (days)",
         yaxis_title="Rate",
