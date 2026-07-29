@@ -204,6 +204,22 @@ declineCurveAnalysis = dbc.Card(
         # --- Results Section ---
         html.Div(id="dca-results", className="mt-3"),
 
+        # --- Export ---
+        dbc.Row([
+            dbc.Col(
+                dbc.Button("Export CSV", id="export-dca-csv-btn", color="secondary",
+                           outline=True, className="w-100"),
+                width=3
+            ),
+            dbc.Col(
+                dbc.Button("Export Excel", id="export-dca-excel-btn", color="secondary",
+                           outline=True, className="w-100"),
+                width=3
+            ),
+        ], className="mt-3 g-2"),
+        dcc.Download(id="dca-download-csv"),
+        dcc.Download(id="dca-download-excel"),
+
     ]),
     className="mt-3 border border-primary-subtle",
     style={"backgroundColor": "#ffffff", "padding": "10px", "borderRadius": "6px"}
@@ -310,6 +326,7 @@ monteCarloSimulation = dbc.Card(
         dcc.Store(id="dca-params-store"),
         dcc.Store(id="dca-time-array"),
         dcc.Store(id="dca-actual-data"),
+        dcc.Store(id="dca-export-store"),
 
         dbc.Button(
             "Run Monte Carlo",
@@ -768,7 +785,8 @@ def duong_decline(t, qi, a, m):
      Output("dca-results", "children"),
      Output("dca-params-store", "data"),
      Output("dca-time-array", "data"),
-     Output("dca-actual-data", "data")],
+     Output("dca-actual-data", "data"),
+     Output("dca-export-store", "data")],
     Input("dca-column-dropdown", "value"),
     Input("dca-model-selector", "value"),
     Input("dca-row-slider", "value"),
@@ -798,6 +816,7 @@ def run_dca_model(columns, model_types, row_limit, df_json,
     results_blocks = []
     params_store = {}
     actual_data_store = {}
+    export_rows = []
     last_t = []
 
     # A distinct color per column so every model fitted to the same column shares
@@ -823,6 +842,8 @@ def run_dca_model(columns, model_types, row_limit, df_json,
             x=df["Date"], y=q, mode="markers", name=f"{column} (actual)",
             marker=dict(color=color, size=5)
         ))
+
+        date_strs = df["Date"].dt.strftime("%Y-%m-%d").tolist()
 
         col_params = {}
         total_curve = np.zeros_like(q, dtype=float)
@@ -853,6 +874,17 @@ def run_dca_model(columns, model_types, row_limit, df_json,
             q_fit = func(t, *params)
             Q_cum = np.cumsum(q_fit * dt)
             total_curve += q_fit
+
+            for i in range(len(t)):
+                export_rows.append({
+                    "Column": column,
+                    "Model": model_type.title(),
+                    "Date": date_strs[i],
+                    "Days": int(t[i]),
+                    "Actual": float(q[i]),
+                    "Fitted": float(q_fit[i]),
+                    "Cumulative_Fitted": float(Q_cum[i]),
+                })
 
             dash_style = "solid" if model_type == "hyperbolic" else ("dash" if model_type == "arps" else "dot")
             fig_rate.add_trace(go.Scatter(
@@ -894,10 +926,10 @@ def run_dca_model(columns, model_types, row_limit, df_json,
 
         results_blocks.extend(col_results)
         params_store[column] = col_params
-        actual_data_store[column] = {"t": t.tolist(), "q": q.tolist(), "dates": df["Date"].dt.strftime("%Y-%m-%d").tolist()}
+        actual_data_store[column] = {"t": t.tolist(), "q": q.tolist(), "dates": date_strs}
 
     if not params_store:
-        return go.Figure(), go.Figure(), html.Div("No data"), {}, [], {}
+        return go.Figure(), go.Figure(), html.Div("No data"), {}, [], {}, []
 
     fig_rate.update_layout(
         title="Rate View" + (" \u2014 Comparison" if len(columns) > 1 else ""),
@@ -917,7 +949,55 @@ def run_dca_model(columns, model_types, row_limit, df_json,
     if not show_cum_view:
         fig_cum = go.Figure()
 
-    return fig_rate, fig_cum, results_blocks, params_store, last_t, actual_data_store
+    return fig_rate, fig_cum, results_blocks, params_store, last_t, actual_data_store, export_rows
+
+@app.callback(
+    Output("dca-download-csv", "data"),
+    Input("export-dca-csv-btn", "n_clicks"),
+    State("dca-export-store", "data"),
+    prevent_initial_call=True
+)
+def export_dca_csv(n_clicks, export_rows):
+    if not export_rows:
+        raise exceptions.PreventUpdate
+    df_export = pd.DataFrame(export_rows)
+    return dcc.send_data_frame(df_export.to_csv, "dca_export.csv", index=False)
+
+@app.callback(
+    Output("dca-download-excel", "data"),
+    Input("export-dca-excel-btn", "n_clicks"),
+    State("dca-export-store", "data"),
+    State("dca-params-store", "data"),
+    prevent_initial_call=True
+)
+def export_dca_excel(n_clicks, export_rows, params_store):
+    if not export_rows:
+        raise exceptions.PreventUpdate
+
+    df_curves = pd.DataFrame(export_rows)
+
+    summary_rows = []
+    for column, models in (params_store or {}).items():
+        for model_type, p in models.items():
+            summary_rows.append({
+                "Column": column,
+                "Model": model_type.title(),
+                "qi": p.get("qi"),
+                "Di": p.get("Di"),
+                "b": p.get("b"),
+                "a": p.get("a"),
+                "m": p.get("m"),
+                "EUR": p.get("Q"),
+            })
+    df_summary = pd.DataFrame(summary_rows)
+
+    def write_excel(bytes_io):
+        with pd.ExcelWriter(bytes_io, engine="openpyxl") as writer:
+            df_summary.to_excel(writer, sheet_name="Summary", index=False)
+            df_curves.to_excel(writer, sheet_name="Curve Data", index=False)
+
+    return dcc.send_bytes(write_excel, "dca_export.xlsx")
+
 
 @app.callback(
     [Output("dca-date-range", "start_date"),

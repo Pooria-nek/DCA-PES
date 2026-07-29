@@ -5,3 +5,4 @@ scipy
 dash
 dash-bootstrap-components
 plotly
+openpyxl
