@@ -875,6 +875,9 @@ def run_dca_model(columns, model_types, row_limit, df_json,
             Q_cum = np.cumsum(q_fit * dt)
             total_curve += q_fit
 
+            rmse = float(np.sqrt(np.mean((q - q_fit) ** 2)))
+            rmse_pct = float(rmse / np.mean(q) * 100) if np.mean(q) != 0 else None
+
             for i in range(len(t)):
                 export_rows.append({
                     "Column": column,
@@ -905,18 +908,25 @@ def run_dca_model(columns, model_types, row_limit, df_json,
 
             if model_type in ("hyperbolic", "arps"):
                 qi, Di, b = params
-                col_params[model_type] = {"qi": float(qi), "Di": float(Di), "b": float(b), "Q": float(Q_cum[-1])}
-                result = f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- b = {b:.2f}\n- EUR = {Q_cum[-1]:.2f}"
+                col_params[model_type] = {"qi": float(qi), "Di": float(Di), "b": float(b), "Q": float(Q_cum[-1]),
+                                           "RMSE": rmse, "RMSE_pct": rmse_pct}
+                result = (f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- b = {b:.2f}\n"
+                          f"- EUR = {Q_cum[-1]:.2f}\n- RMSE = {rmse:.2f}" + (f" ({rmse_pct:.1f}% of mean rate)" if rmse_pct is not None else ""))
             elif model_type == "duong":
                 qi, a, m = params
-                col_params[model_type] = {"qi": float(qi), "a": float(a), "m": float(m), "Q": float(Q_cum[-1])}
-                result = f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- a = {a:.4f}\n- m = {m:.4f}\n- EUR = {Q_cum[-1]:.2f}"
+                col_params[model_type] = {"qi": float(qi), "a": float(a), "m": float(m), "Q": float(Q_cum[-1]),
+                                           "RMSE": rmse, "RMSE_pct": rmse_pct}
+                result = (f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- a = {a:.4f}\n- m = {m:.4f}\n"
+                          f"- EUR = {Q_cum[-1]:.2f}\n- RMSE = {rmse:.2f}" + (f" ({rmse_pct:.1f}% of mean rate)" if rmse_pct is not None else ""))
             else:
                 qi, Di = params[:2]
-                col_params[model_type] = {"qi": float(qi), "Di": float(Di), "b": None, "Q": float(Q_cum[-1])}
-                result = f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- EUR = {Q_cum[-1]:.2f}"
+                col_params[model_type] = {"qi": float(qi), "Di": float(Di), "b": None, "Q": float(Q_cum[-1]),
+                                           "RMSE": rmse, "RMSE_pct": rmse_pct}
+                result = (f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n"
+                          f"- EUR = {Q_cum[-1]:.2f}\n- RMSE = {rmse:.2f}" + (f" ({rmse_pct:.1f}% of mean rate)" if rmse_pct is not None else ""))
 
             col_results.append(dcc.Markdown(result))
+
 
         if "total" in model_types and col_params:
             fig_rate.add_trace(go.Scatter(
@@ -988,6 +998,8 @@ def export_dca_excel(n_clicks, export_rows, params_store):
                 "a": p.get("a"),
                 "m": p.get("m"),
                 "EUR": p.get("Q"),
+                "RMSE": p.get("RMSE"),
+                "RMSE_pct_of_mean": p.get("RMSE_pct"),
             })
     df_summary = pd.DataFrame(summary_rows)
 
