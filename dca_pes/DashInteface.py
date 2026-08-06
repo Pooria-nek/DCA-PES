@@ -875,6 +875,23 @@ def run_dca_model(columns, model_types, row_limit, df_json,
             Q_cum = np.cumsum(q_fit * dt)
             total_curve += q_fit
 
+            resid = q - q_fit
+            n_pts, n_params = len(t), len(params)
+            dof = max(n_pts - n_params, 1)  # degrees of freedom, floored at 1 to avoid div-by-zero on tiny samples
+
+            rmse = float(np.sqrt(np.mean(resid ** 2)))
+            mae = float(np.mean(np.abs(resid)))
+            std_error = float(np.sqrt(np.sum(resid ** 2) / dof))  # standard error of the regression (dof-corrected)
+            rmse_pct = float(rmse / np.mean(q) * 100) if np.mean(q) != 0 else None
+
+            nonzero = q != 0
+            mape = float(np.mean(np.abs(resid[nonzero] / q[nonzero])) * 100) if nonzero.any() else None
+
+            fit_metrics = {"RMSE": rmse, "RMSE_pct": rmse_pct, "MAE": mae, "StdError": std_error, "MAPE": mape}
+            metrics_line = (f"- RMSE = {rmse:.2f}" + (f" ({rmse_pct:.1f}% of mean rate)" if rmse_pct is not None else "")
+                             + f"\n- MAE = {mae:.2f}\n- Std. Error = {std_error:.2f}"
+                             + (f"\n- MAPE = {mape:.1f}%" if mape is not None else "\n- MAPE = n/a (actual values are 0)"))
+
             for i in range(len(t)):
                 export_rows.append({
                     "Column": column,
@@ -905,16 +922,16 @@ def run_dca_model(columns, model_types, row_limit, df_json,
 
             if model_type in ("hyperbolic", "arps"):
                 qi, Di, b = params
-                col_params[model_type] = {"qi": float(qi), "Di": float(Di), "b": float(b), "Q": float(Q_cum[-1])}
-                result = f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- b = {b:.2f}\n- EUR = {Q_cum[-1]:.2f}"
+                col_params[model_type] = {"qi": float(qi), "Di": float(Di), "b": float(b), "Q": float(Q_cum[-1]), **fit_metrics}
+                result = f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- b = {b:.2f}\n- EUR = {Q_cum[-1]:.2f}\n{metrics_line}"
             elif model_type == "duong":
                 qi, a, m = params
-                col_params[model_type] = {"qi": float(qi), "a": float(a), "m": float(m), "Q": float(Q_cum[-1])}
-                result = f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- a = {a:.4f}\n- m = {m:.4f}\n- EUR = {Q_cum[-1]:.2f}"
+                col_params[model_type] = {"qi": float(qi), "a": float(a), "m": float(m), "Q": float(Q_cum[-1]), **fit_metrics}
+                result = f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- a = {a:.4f}\n- m = {m:.4f}\n- EUR = {Q_cum[-1]:.2f}\n{metrics_line}"
             else:
                 qi, Di = params[:2]
-                col_params[model_type] = {"qi": float(qi), "Di": float(Di), "b": None, "Q": float(Q_cum[-1])}
-                result = f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- EUR = {Q_cum[-1]:.2f}"
+                col_params[model_type] = {"qi": float(qi), "Di": float(Di), "b": None, "Q": float(Q_cum[-1]), **fit_metrics}
+                result = f"### {column} \u2014 {model_type.title()}\n- qi = {qi:.2f}\n- Di = {Di:.4f}\n- EUR = {Q_cum[-1]:.2f}\n{metrics_line}"
 
             col_results.append(dcc.Markdown(result))
 
@@ -988,6 +1005,11 @@ def export_dca_excel(n_clicks, export_rows, params_store):
                 "a": p.get("a"),
                 "m": p.get("m"),
                 "EUR": p.get("Q"),
+                "RMSE": p.get("RMSE"),
+                "RMSE_pct_of_mean": p.get("RMSE_pct"),
+                "MAE": p.get("MAE"),
+                "StdError": p.get("StdError"),
+                "MAPE_pct": p.get("MAPE"),
             })
     df_summary = pd.DataFrame(summary_rows)
 
