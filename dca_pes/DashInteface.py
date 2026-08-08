@@ -171,7 +171,7 @@ declineCurveAnalysis = dbc.Card(
         # --- Date Picker & Column Selector ---
         dbc.Row([
             dbc.Col([
-                html.Label("Date Range:"),
+                html.Label("Fit Range:"),
                 dcc.DatePickerRange(
                     id='dca-date-range',
                     min_date_allowed=date(2000, 1, 1),
@@ -180,7 +180,17 @@ declineCurveAnalysis = dbc.Card(
                     end_date=date(2020, 1, 1),
                     display_format='YYYY-MM-DD',
                 )
-            ], width=5),
+            ], width=4),
+
+            dbc.Col([
+                html.Label("Predict Range (optional):"),
+                dcc.DatePickerRange(
+                    id='dca-predict-range',
+                    min_date_allowed=date(2000, 1, 1),
+                    max_date_allowed=date(2100, 1, 1),
+                    display_format='YYYY-MM-DD',
+                )
+            ], width=4),
 
             dbc.Col([
                 html.Label("Select Column(s):"),
@@ -189,7 +199,7 @@ declineCurveAnalysis = dbc.Card(
                     placeholder="Select rate column(s)...",
                     multi=True
                 )
-            ], width=7),
+            ], width=4),
         ], className="mb-3"),
 
         dbc.Row([
@@ -793,12 +803,14 @@ def duong_decline(t, qi, a, m):
     Input("dataframevalue", "data"),
     Input("dca-date-range", "start_date"),
     Input("dca-date-range", "end_date"),
+    Input("dca-predict-range", "start_date"),
+    Input("dca-predict-range", "end_date"),
     Input("show-cumulative-toggle", "value"),
     Input("show-cumulative-view", "value"),
     prevent_initial_call=True
 )
 def run_dca_model(columns, model_types, row_limit, df_json,
-                  start_date, end_date, show_cum_on_rate, show_cum_view):
+                  start_date, end_date, predict_start, predict_end, show_cum_on_rate, show_cum_view):
     if not columns or not df_json or not model_types:
         raise exceptions.PreventUpdate
 
@@ -808,8 +820,7 @@ def run_dca_model(columns, model_types, row_limit, df_json,
     df_full = pd.read_json(io.StringIO(df_json), orient="split")
     df_full["Date"] = pd.to_datetime(df_full["Date"]).dt.tz_localize(None)
 
-    if start_date and end_date:
-        df_full = df_full[(df_full["Date"] >= pd.to_datetime(start_date)) & (df_full["Date"] <= pd.to_datetime(end_date))]
+    predicting = bool(predict_start and predict_end)
 
     fig_rate = go.Figure()
     fig_cum = go.Figure()
@@ -826,7 +837,11 @@ def run_dca_model(columns, model_types, row_limit, df_json,
     for col_idx, column in enumerate(columns):
         color = palette[col_idx % len(palette)]
 
-        df = df_full.dropna(subset=[column]).sort_values("Date")
+        df_col = df_full.dropna(subset=[column]).sort_values("Date")
+
+        df = df_col
+        if start_date and end_date:
+            df = df[(df["Date"] >= pd.to_datetime(start_date)) & (df["Date"] <= pd.to_datetime(end_date))]
         if row_limit:
             df = df.head(row_limit)
         if df.empty:
@@ -837,6 +852,12 @@ def run_dca_model(columns, model_types, row_limit, df_json,
         dt = np.diff(t, prepend=t[0])
         dt[dt <= 0] = 1.0
         last_t = t.tolist()
+
+        fit_origin = df["Date"].iloc[0]
+        df_predict = pd.DataFrame()
+        if predicting:
+            df_predict = df_col[(df_col["Date"] >= pd.to_datetime(predict_start)) & (df_col["Date"] <= pd.to_datetime(predict_end))]
+
 
         fig_rate.add_trace(go.Scatter(
             x=df["Date"], y=q, mode="markers", name=f"{column} (actual)",
@@ -896,6 +917,7 @@ def run_dca_model(columns, model_types, row_limit, df_json,
                 export_rows.append({
                     "Column": column,
                     "Model": model_type.title(),
+                    "Segment": "Fit",
                     "Date": date_strs[i],
                     "Days": int(t[i]),
                     "Actual": float(q[i]),
@@ -935,6 +957,58 @@ def run_dca_model(columns, model_types, row_limit, df_json,
 
             col_results.append(dcc.Markdown(result))
 
+            if predicting and not df_predict.empty:
+                t_pred = (df_predict["Date"] - fit_origin).dt.days.values
+                q_pred_actual = df_predict[column].values
+                q_pred_fit = func(t_pred, *params)
+                pred_date_strs = df_predict["Date"].dt.strftime("%Y-%m-%d").tolist()
+
+                fig_rate.add_trace(go.Scatter(
+                    x=df_predict["Date"], y=q_pred_fit, mode="lines", name=f"{column} \u2014 {model_type.title()} (predicted)",
+                    line=dict(color=color, dash="dash", width=2)
+                ))
+                fig_rate.add_trace(go.Scatter(
+                    x=df_predict["Date"], y=q_pred_actual, mode="markers", name=f"{column} (actual, predict window)",
+                    marker=dict(color=color, size=6, symbol="diamond-open")
+                ))
+
+                pred_resid = q_pred_actual - q_pred_fit
+                pred_rmse = float(np.sqrt(np.mean(pred_resid ** 2)))
+                pred_mae = float(np.mean(np.abs(pred_resid)))
+                pred_nonzero = q_pred_actual != 0
+                pred_mape = float(np.mean(np.abs(pred_resid[pred_nonzero] / q_pred_actual[pred_nonzero])) * 100) if pred_nonzero.any() else None
+
+                if np.isnan(pred_rmse) or np.isnan(pred_mae):
+                    # Extrapolation went numerically invalid (e.g. a degenerate fit with an
+                    # extreme b blowing up outside the fit window) rather than just inaccurate.
+                    pred_rmse = pred_mae = pred_mape = None
+
+                col_params[model_type]["predict"] = {
+                    "start": predict_start, "end": predict_end,
+                    "RMSE": pred_rmse, "MAE": pred_mae, "MAPE": pred_mape,
+                }
+                col_results.append(dcc.Markdown(
+                    f"#### {column} \u2014 {model_type.title()} \u2014 Predict window validation ({predict_start} to {predict_end})\n"
+                    + (f"- RMSE = {pred_rmse:.2f}\n- MAE = {pred_mae:.2f}\n"
+                       + (f"- MAPE = {pred_mape:.1f}%" if pred_mape is not None else "- MAPE = n/a (actual values are 0)")
+                       if pred_rmse is not None
+                       else "- _Prediction is numerically invalid in this window (the fit likely diverges here - "
+                            "check the parameters above for an unbounded or degenerate result)._")
+                ))
+
+                for i in range(len(t_pred)):
+                    export_rows.append({
+                        "Column": column,
+                        "Model": model_type.title(),
+                        "Segment": "Predict",
+                        "Date": pred_date_strs[i],
+                        "Days": int(t_pred[i]),
+                        "Actual": float(q_pred_actual[i]),
+                        "Fitted": float(q_pred_fit[i]),
+                        "Cumulative_Fitted": None,
+                    })
+
+
 
         if "total" in model_types and col_params:
             fig_rate.add_trace(go.Scatter(
@@ -949,8 +1023,15 @@ def run_dca_model(columns, model_types, row_limit, df_json,
     if not params_store:
         return go.Figure(), go.Figure(), html.Div("No data"), {}, [], {}, []
 
+    if predicting:
+        fig_rate.add_vline(
+            x=pd.to_datetime(predict_start),
+            line_dash="dot", line_color="gray",
+            annotation_text="Predict starts", annotation_position="top"
+        )
+
     fig_rate.update_layout(
-        title="Rate View" + (" \u2014 Comparison" if len(columns) > 1 else ""),
+        title="Rate View" + (" \u2014 Comparison" if len(columns) > 1 else "") + (" \u2014 Fit / Predict" if predicting else ""),
         xaxis=dict(title="Date", rangeslider=dict(visible=True), type="date"),
         yaxis_title="Rate",
         yaxis2=dict(title="Cumulative", overlaying="y", side="right"),
@@ -997,6 +1078,7 @@ def export_dca_excel(n_clicks, export_rows, params_store):
     summary_rows = []
     for column, models in (params_store or {}).items():
         for model_type, p in models.items():
+            pred = p.get("predict") or {}
             summary_rows.append({
                 "Column": column,
                 "Model": model_type.title(),
@@ -1011,6 +1093,11 @@ def export_dca_excel(n_clicks, export_rows, params_store):
                 "MAE": p.get("MAE"),
                 "StdError": p.get("StdError"),
                 "MAPE_pct": p.get("MAPE"),
+                "Predict_Start": pred.get("start"),
+                "Predict_End": pred.get("end"),
+                "Predict_RMSE": pred.get("RMSE"),
+                "Predict_MAE": pred.get("MAE"),
+                "Predict_MAPE_pct": pred.get("MAPE"),
             })
     df_summary = pd.DataFrame(summary_rows)
 
