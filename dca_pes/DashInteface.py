@@ -621,7 +621,9 @@ def update_graph(selected_columns, df_json, peaks_json, active_peaks, start_date
                     y=col_peaks[col],
                     mode='markers',
                     name=f"Peaks - {col}",
-                    marker=dict(color='red', size=8, symbol='circle'),
+                    marker=dict(color='red', size=10, symbol='circle', line=dict(width=1, color="darkred")),
+                    customdata=[col] * len(col_peaks),
+                    hovertemplate='Peak: %{x|%Y-%m-%d}<br>%{y}<br><i>Click to set Fit Range to this segment</i><extra></extra>',
                     showlegend=True
                 ))
 
@@ -668,6 +670,56 @@ def update_graph(selected_columns, df_json, peaks_json, active_peaks, start_date
     )
 
     return fig
+
+@app.callback(
+    [Output("dca-date-range", "start_date"),
+     Output("dca-date-range", "end_date")],
+    Input("data-preview-graph", "clickData"),
+    State("dataframepeaksvalue", "data"),
+    State("dataframevalue", "data"),
+    prevent_initial_call=True
+)
+def select_peak_segment(click_data, peaks_json, df_json):
+    """Clicking a peak marker on the preview graph sets the Fit Range to run
+    from that peak to the next one - the classic decline-segment workflow,
+    where each peak marks a re-completion/workover that resets the decline."""
+    if not click_data or not peaks_json:
+        raise exceptions.PreventUpdate
+
+    point = click_data["points"][0]
+    col = point.get("customdata")
+    if not col:
+        raise exceptions.PreventUpdate  # clicked the raw data line, not a peak marker
+
+    df_peaks = pd.read_json(io.StringIO(peaks_json), orient="split")
+    if col not in df_peaks.columns:
+        raise exceptions.PreventUpdate
+
+    col_peaks = df_peaks[["Date", col]].dropna(subset=[col]).copy()
+    if col_peaks.empty:
+        raise exceptions.PreventUpdate
+    col_peaks["Date"] = pd.to_datetime(col_peaks["Date"])
+    col_peaks = col_peaks.sort_values("Date")
+
+    dates = col_peaks["Date"].tolist()
+    date_strs = [d.strftime("%Y-%m-%d") for d in dates]
+    clicked_date_str = str(point["x"])[:10]
+    if clicked_date_str not in date_strs:
+        raise exceptions.PreventUpdate
+
+    idx = date_strs.index(clicked_date_str)
+    start = dates[idx]
+
+    if idx + 1 < len(dates):
+        end = dates[idx + 1]
+    else:
+        # Last peak - run through the end of this column's real data
+        df = pd.read_json(io.StringIO(df_json), orient="split")
+        df["Date"] = pd.to_datetime(df["Date"])
+        valid = df.dropna(subset=[col]) if col in df.columns else df
+        end = valid["Date"].max() if not valid.empty else start
+
+    return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
 
 #------------------------------------------------------------------------------
 #---------------------PARSE _ DATA---------------------------------------------
@@ -1154,7 +1206,11 @@ def run_dca_model(columns, model_types, row_limit, df_json,
 
         results_blocks.extend(col_results)
         params_store[column] = col_params
-        actual_data_store[column] = {"t": t.tolist(), "q": q.tolist(), "dates": date_strs}
+        actual_data_store[column] = {
+            "t": t.tolist(), "q": q.tolist(), "dates": date_strs,
+            "predict_t": (forecast_dates - fit_origin).days.tolist() if len(forecast_dates) > 0 else [],
+            "predict_dates": forecast_dates.strftime("%Y-%m-%d").tolist() if len(forecast_dates) > 0 else [],
+        }
 
     if not params_store:
         return go.Figure(), go.Figure(), html.Div("No data"), {}, [], {}, []
@@ -1338,7 +1394,15 @@ def run_monte_carlo(n_clicks, params_store, fit_key, actual_data_store,
     if not actual_data or not actual_data.get("t"):
         raise exceptions.PreventUpdate
 
-    t = np.array(actual_data["t"], dtype=float)
+    fit_t = np.array(actual_data["t"], dtype=float)
+    predict_t = np.array(actual_data.get("predict_t") or [], dtype=float)
+
+    # Simulate across the fit window AND the predict window together, so the
+    # uncertainty fan chart projects forward into the forecast too, not just
+    # within the historical fit range.
+    t = np.union1d(fit_t, predict_t)
+    predict_start_t = predict_t.min() if len(predict_t) > 0 else None
+
     dt = np.diff(t, prepend=t[0])
     dt[dt <= 0] = 1.0
 
@@ -1450,9 +1514,14 @@ def run_monte_carlo(n_clicks, params_store, fit_key, actual_data_store,
             marker=dict(size=5, color="black"), name="Actual data"
         ))
 
+    if predict_start_t is not None:
+        fig.add_vline(x=predict_start_t, line_dash="dot", line_color="gray",
+                      annotation_text="Predict starts", annotation_position="top")
+
     fig.update_layout(
         title=f"Monte Carlo Simulation \u2014 {column} ({model_type.title()}) - {n_simulations} iterations<br>"
-              f"P10 EUR={p10_eur:.1f} | P50 EUR={p50_eur:.1f} | P90 EUR={p90_eur:.1f}",
+              f"P10 EUR={p10_eur:.1f} | P50 EUR={p50_eur:.1f} | P90 EUR={p90_eur:.1f}"
+              + (" (includes forecast window)" if predict_start_t is not None else ""),
         xaxis_title="Time (days)",
         yaxis_title="Rate",
         template="plotly_white",
