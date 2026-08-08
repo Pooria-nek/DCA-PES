@@ -7,7 +7,7 @@ from dash import html
 from dash.exceptions import PreventUpdate
 import pandas as pd
 import plotly.graph_objs as go
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output, State, ALL
 from dash import dash_table
 import numpy as np
 import json
@@ -97,17 +97,6 @@ uploadSection = dbc.Card(
             }
         ),
 
-        # Toggle and range for peaks display
-        dbc.Row([
-            dbc.Col([
-                dbc.Checkbox(
-                    id="show-peaks-toggle",
-                    value=True,
-                ),
-                html.Label("show peaks", htmlFor="show-peaks-toggle", style={"marginLeft": "8px"}),
-            ])
-        ], className="mb-3"),
-
         html.Div([
         html.Label("Select Peaks Date Range", className="fw-bold"),
         dcc.DatePickerRange(
@@ -117,7 +106,14 @@ uploadSection = dbc.Card(
             end_date_placeholder_text="End Date",
             style={"marginBottom": "10px"}
         )
-        ], style={"marginTop": "10px"})
+        ], style={"marginTop": "10px"}),
+
+        html.Div([
+            html.Label("Detected Peaks (toggle individually)", className="fw-bold"),
+            html.Div(id="peaks-switches-container", className="mt-1",
+                     style={"maxHeight": "220px", "overflowY": "auto"}),
+        ], style={"marginTop": "10px"}),
+        dcc.Store(id="peaks-active-store"),
     ],
     body=True,
     color="#F9F9F9",
@@ -502,18 +498,74 @@ def update_checklist(icontents, ifilename, date):
     ]
 
 @app.callback(
+    Output("peaks-switches-container", "children"),
+    Input("checklistfiles", "value"),
+    Input("dataframepeaksvalue", "data"),
+    Input("peaks-date-range", "start_date"),
+    Input("peaks-date-range", "end_date"),
+    prevent_initial_call=True
+)
+def build_peak_switches(selected_columns, peaks_json, start_date, end_date):
+    if not selected_columns or not peaks_json:
+        return html.Div("Select column(s) above to see detected peaks.", className="text-muted small")
+
+    df_peaks = pd.read_json(io.StringIO(peaks_json), orient="split")
+    if "Date" not in df_peaks.columns:
+        return html.Div("No peaks detected.", className="text-muted small")
+
+    if start_date:
+        df_peaks = df_peaks[df_peaks["Date"] >= start_date]
+    if end_date:
+        df_peaks = df_peaks[df_peaks["Date"] <= end_date]
+
+    switches = []
+    for col in selected_columns:
+        if col not in df_peaks.columns:
+            continue
+        col_peaks = df_peaks[["Date", col]].dropna(subset=[col])
+        if col_peaks.empty:
+            continue
+        switches.append(html.Div(col, className="fw-bold small mt-2"))
+        for _, row in col_peaks.iterrows():
+            date_str = str(row["Date"])[:10]
+            key = f"{col}||{date_str}"
+            switches.append(dbc.Switch(
+                id={"type": "peak-switch", "index": key},
+                label=f"{date_str}  ({row[col]:.2f})",
+                value=True,
+                className="small",
+            ))
+
+    if not switches:
+        return html.Div("No peaks found for the selected column(s) in this date range.", className="text-muted small")
+    return switches
+
+@app.callback(
+    Output("peaks-active-store", "data"),
+    Input({"type": "peak-switch", "index": ALL}, "value"),
+    State({"type": "peak-switch", "index": ALL}, "id"),
+)
+def aggregate_active_peaks(values, ids):
+    """Each individual peak switch feeds this - it's what makes 'show peaks' work
+    per-peak instead of one global on/off (the old toggle listened on a 'checked'
+    prop that dbc.Checkbox doesn't actually have, so it never fired at all)."""
+    if not ids:
+        return []
+    return [id_dict["index"] for id_dict, val in zip(ids, values) if val]
+
+@app.callback(
     Output("data-preview-graph", "figure"),
     [
         Input("checklistfiles", "value"),
         Input("dataframevalue", "data"),
         Input("dataframepeaksvalue", "data"),
-        Input("show-peaks-toggle", "checked"),
+        Input("peaks-active-store", "data"),
         Input("peaks-date-range", "start_date"),
         Input("peaks-date-range", "end_date")
     ],
     prevent_initial_call=True
 )
-def update_graph(selected_columns, df_json, peaks_json, show_peaks, start_date, end_date):
+def update_graph(selected_columns, df_json, peaks_json, active_peaks, start_date, end_date):
     if not selected_columns or not df_json or not peaks_json:
         fig = go.Figure()
         fig.update_layout(
@@ -539,6 +591,8 @@ def update_graph(selected_columns, df_json, peaks_json, show_peaks, start_date, 
     if end_date:
         df_peaks = df_peaks[df_peaks['Date'] <= end_date]
 
+    active_set = set(active_peaks or [])
+
     fig = go.Figure()
 
     for col in selected_columns:
@@ -555,15 +609,21 @@ def update_graph(selected_columns, df_json, peaks_json, show_peaks, start_date, 
             hovertemplate='%{x|%Y-%m-%d %H:%M:%S}<br>%{y}<extra>' + col + '</extra>'
         ))
 
-        if show_peaks and col in df_peaks.columns:
-            fig.add_trace(go.Scatter(
-                x=df_peaks['Date'],
-                y=df_peaks[col],
-                mode='markers',
-                name=f"Peaks - {col}",
-                marker=dict(color='red', size=8, symbol='circle'),
-                showlegend=True
-            ))
+        if col in df_peaks.columns:
+            col_peaks = df_peaks[["Date", col]].dropna(subset=[col])
+            if not col_peaks.empty:
+                is_active = col_peaks["Date"].astype(str).str[:10].apply(lambda d, c=col: f"{c}||{d}" in active_set)
+                col_peaks = col_peaks[is_active]
+
+            if not col_peaks.empty:
+                fig.add_trace(go.Scatter(
+                    x=col_peaks['Date'],
+                    y=col_peaks[col],
+                    mode='markers',
+                    name=f"Peaks - {col}",
+                    marker=dict(color='red', size=8, symbol='circle'),
+                    showlegend=True
+                ))
 
     fig.update_layout(
         title=dict(
@@ -788,6 +848,37 @@ def duong_decline(t, qi, a, m):
     """
     t = np.array(t, dtype=float)
     return qi / np.power(t + 1, m) * np.exp(-a * t)
+
+@app.callback(
+    Output("dca-predict-range", "start_date"),
+    Input("dca-column-dropdown", "value"),
+    State("dataframevalue", "data"),
+    prevent_initial_call=True
+)
+def auto_set_predict_start(columns, df_json):
+    """Predict Range should start right where the real data ends, by default -
+    the user can still drag it earlier for holdout validation if they want."""
+    if not columns or not df_json:
+        raise exceptions.PreventUpdate
+
+    if isinstance(columns, str):
+        columns = [columns]
+
+    df = pd.read_json(io.StringIO(df_json), orient="split")
+    df["Date"] = pd.to_datetime(df["Date"])
+
+    last_dates = []
+    for col in columns:
+        if col in df.columns:
+            valid = df.dropna(subset=[col])
+            if not valid.empty:
+                last_dates.append(valid["Date"].max())
+
+    if not last_dates:
+        raise exceptions.PreventUpdate
+
+    next_date = max(last_dates) + pd.Timedelta(days=1)
+    return next_date.strftime("%Y-%m-%d")
 
 @app.callback(
     [Output("dca-graph", "figure"),
