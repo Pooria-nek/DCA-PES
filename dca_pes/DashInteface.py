@@ -854,9 +854,20 @@ def run_dca_model(columns, model_types, row_limit, df_json,
         last_t = t.tolist()
 
         fit_origin = df["Date"].iloc[0]
-        df_predict = pd.DataFrame()
+        forecast_dates = pd.DatetimeIndex([])
+        df_predict_actual = pd.DataFrame()
         if predicting:
-            df_predict = df_col[(df_col["Date"] >= pd.to_datetime(predict_start)) & (df_col["Date"] <= pd.to_datetime(predict_end))]
+            # Match the fit data's typical sample spacing so the forecast has a similar
+            # point density, rather than assuming daily (won't hold for monthly-cadence data).
+            step_days = int(np.median(np.diff(t))) if len(t) > 1 else 1
+            step_days = max(step_days, 1)
+            forecast_dates = pd.date_range(start=predict_start, end=predict_end, freq=f"{step_days}D")
+
+            # Real data may or may not exist in this window - if it does (e.g. validating
+            # against a historical holdout), keep it for an accuracy overlay; if the window
+            # is purely in the future past the last real point, this is just empty and the
+            # forecast still renders on its own.
+            df_predict_actual = df_col[(df_col["Date"] >= pd.to_datetime(predict_start)) & (df_col["Date"] <= pd.to_datetime(predict_end))]
 
 
         fig_rate.add_trace(go.Scatter(
@@ -957,44 +968,62 @@ def run_dca_model(columns, model_types, row_limit, df_json,
 
             col_results.append(dcc.Markdown(result))
 
-            if predicting and not df_predict.empty:
-                t_pred = (df_predict["Date"] - fit_origin).dt.days.values
-                q_pred_actual = df_predict[column].values
+            if predicting and len(forecast_dates) > 0:
+                t_pred = (forecast_dates - fit_origin).days.values
                 q_pred_fit = func(t_pred, *params)
-                pred_date_strs = df_predict["Date"].dt.strftime("%Y-%m-%d").tolist()
+                pred_date_strs = forecast_dates.strftime("%Y-%m-%d").tolist()
 
                 fig_rate.add_trace(go.Scatter(
-                    x=df_predict["Date"], y=q_pred_fit, mode="lines", name=f"{column} \u2014 {model_type.title()} (predicted)",
+                    x=forecast_dates, y=q_pred_fit, mode="lines", name=f"{column} \u2014 {model_type.title()} (predicted)",
                     line=dict(color=color, dash="dash", width=2)
                 ))
-                fig_rate.add_trace(go.Scatter(
-                    x=df_predict["Date"], y=q_pred_actual, mode="markers", name=f"{column} (actual, predict window)",
-                    marker=dict(color=color, size=6, symbol="diamond-open")
-                ))
 
-                pred_resid = q_pred_actual - q_pred_fit
-                pred_rmse = float(np.sqrt(np.mean(pred_resid ** 2)))
-                pred_mae = float(np.mean(np.abs(pred_resid)))
-                pred_nonzero = q_pred_actual != 0
-                pred_mape = float(np.mean(np.abs(pred_resid[pred_nonzero] / q_pred_actual[pred_nonzero])) * 100) if pred_nonzero.any() else None
+                has_actual = not df_predict_actual.empty
+                pred_rmse = pred_mae = pred_mape = None
 
-                if np.isnan(pred_rmse) or np.isnan(pred_mae):
-                    # Extrapolation went numerically invalid (e.g. a degenerate fit with an
-                    # extreme b blowing up outside the fit window) rather than just inaccurate.
-                    pred_rmse = pred_mae = pred_mape = None
+                if has_actual:
+                    # Real data overlaps the predict window (e.g. validating against a
+                    # historical holdout) - show it and score the forecast against it.
+                    q_pred_fit_at_actual = func((df_predict_actual["Date"] - fit_origin).dt.days.values, *params)
+                    q_pred_actual = df_predict_actual[column].values
+
+                    fig_rate.add_trace(go.Scatter(
+                        x=df_predict_actual["Date"], y=q_pred_actual, mode="markers", name=f"{column} (actual, predict window)",
+                        marker=dict(color=color, size=6, symbol="diamond-open")
+                    ))
+
+                    pred_resid = q_pred_actual - q_pred_fit_at_actual
+                    pred_rmse = float(np.sqrt(np.mean(pred_resid ** 2)))
+                    pred_mae = float(np.mean(np.abs(pred_resid)))
+                    pred_nonzero = q_pred_actual != 0
+                    pred_mape = float(np.mean(np.abs(pred_resid[pred_nonzero] / q_pred_actual[pred_nonzero])) * 100) if pred_nonzero.any() else None
+
+                    if np.isnan(pred_rmse) or np.isnan(pred_mae):
+                        # Extrapolation went numerically invalid (e.g. a degenerate fit with an
+                        # extreme b blowing up outside the fit window) rather than just inaccurate.
+                        pred_rmse = pred_mae = pred_mape = None
 
                 col_params[model_type]["predict"] = {
                     "start": predict_start, "end": predict_end,
                     "RMSE": pred_rmse, "MAE": pred_mae, "MAPE": pred_mape,
                 }
-                col_results.append(dcc.Markdown(
-                    f"#### {column} \u2014 {model_type.title()} \u2014 Predict window validation ({predict_start} to {predict_end})\n"
-                    + (f"- RMSE = {pred_rmse:.2f}\n- MAE = {pred_mae:.2f}\n"
-                       + (f"- MAPE = {pred_mape:.1f}%" if pred_mape is not None else "- MAPE = n/a (actual values are 0)")
-                       if pred_rmse is not None
-                       else "- _Prediction is numerically invalid in this window (the fit likely diverges here - "
-                            "check the parameters above for an unbounded or degenerate result)._")
-                ))
+
+                if has_actual:
+                    col_results.append(dcc.Markdown(
+                        f"#### {column} \u2014 {model_type.title()} \u2014 Predict window validation ({predict_start} to {predict_end})\n"
+                        + (f"- RMSE = {pred_rmse:.2f}\n- MAE = {pred_mae:.2f}\n"
+                           + (f"- MAPE = {pred_mape:.1f}%" if pred_mape is not None else "- MAPE = n/a (actual values are 0)")
+                           if pred_rmse is not None
+                           else "- _Prediction is numerically invalid in this window (the fit likely diverges here - "
+                                "check the parameters above for an unbounded or degenerate result)._")
+                    ))
+                else:
+                    col_results.append(dcc.Markdown(
+                        f"#### {column} \u2014 {model_type.title()} \u2014 Forecast ({predict_start} to {predict_end})\n"
+                        f"- Forecast qi at start = {q_pred_fit[0]:.2f}\n- Forecast qi at end = {q_pred_fit[-1]:.2f}\n"
+                        "_No actual data exists in this window, so there's nothing to validate against - "
+                        "this is a pure forward forecast._"
+                    ))
 
                 for i in range(len(t_pred)):
                     export_rows.append({
@@ -1003,10 +1032,26 @@ def run_dca_model(columns, model_types, row_limit, df_json,
                         "Segment": "Predict",
                         "Date": pred_date_strs[i],
                         "Days": int(t_pred[i]),
-                        "Actual": float(q_pred_actual[i]),
+                        "Actual": None,
                         "Fitted": float(q_pred_fit[i]),
                         "Cumulative_Fitted": None,
                     })
+
+                if has_actual:
+                    actual_date_strs = df_predict_actual["Date"].dt.strftime("%Y-%m-%d").tolist()
+                    actual_t = (df_predict_actual["Date"] - fit_origin).dt.days.values
+                    for i in range(len(actual_t)):
+                        export_rows.append({
+                            "Column": column,
+                            "Model": model_type.title(),
+                            "Segment": "Predict (actual)",
+                            "Date": actual_date_strs[i],
+                            "Days": int(actual_t[i]),
+                            "Actual": float(q_pred_actual[i]),
+                            "Fitted": float(q_pred_fit_at_actual[i]),
+                            "Cumulative_Fitted": None,
+                        })
+
 
 
 
