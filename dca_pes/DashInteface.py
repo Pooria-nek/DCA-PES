@@ -672,8 +672,8 @@ def update_graph(selected_columns, df_json, peaks_json, active_peaks, start_date
     return fig
 
 @app.callback(
-    [Output("dca-date-range", "start_date"),
-     Output("dca-date-range", "end_date")],
+    [Output("dca-date-range", "start_date", allow_duplicate=True),
+     Output("dca-date-range", "end_date", allow_duplicate=True)],
     Input("data-preview-graph", "clickData"),
     State("dataframepeaksvalue", "data"),
     State("dataframevalue", "data"),
@@ -1305,9 +1305,11 @@ def export_dca_excel(n_clicks, export_rows, params_store):
     [Output("dca-date-range", "start_date"),
      Output("dca-date-range", "end_date")],
     Input("dca-graph", "relayoutData"),
+    State("dca-date-range", "start_date"),
+    State("dca-date-range", "end_date"),
     prevent_initial_call=True
 )
-def sync_date_range_from_graph_selection(relayout_data):
+def sync_date_range_from_graph_selection(relayout_data, cur_start, cur_end):
     """Dragging the range slider (or zoom-selecting the plot area) under the
     rate chart updates the Date Range picker, which in turn re-fits DCA to
     just that window since it's already an Input to run_dca_model."""
@@ -1332,18 +1334,11 @@ def sync_date_range_from_graph_selection(relayout_data):
     except (ValueError, TypeError):
         raise exceptions.PreventUpdate
 
+    if start_date == str(cur_start)[:10] and end_date == str(cur_end)[:10]:
+        raise exceptions.PreventUpdate
     return start_date, end_date
 
     
-@app.callback(
-    [Output("debug-params", "children"),
-     Output("debug-time", "children")],
-    [Input("dca-params-store", "data"),
-     Input("dca-time-array", "data")]
-)
-def debug_outputs(params, time_array):
-    return str(params), str(time_array)
-
 @app.callback(
     [Output("mc-fit-selector", "options"),
      Output("mc-fit-selector", "value")],
@@ -1531,4 +1526,4 @@ def run_monte_carlo(n_clicks, params_store, fit_key, actual_data_store,
     return fig
 
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)
